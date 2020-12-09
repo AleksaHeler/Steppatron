@@ -7,9 +7,10 @@
  * 
  * Run:
  *  ./pwm [frequency] 
- *  ./pwm 1 440
+ *  ./pwm 440
 */
 
+// Includes
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -67,11 +68,9 @@ int main(int argc, char *argv[]){
         usleep(t);
     }
 
-    printf("Done ramping up!");
-
     // Actually play the note
+    t = FREQ_TO_US(frequency)/2;
     while(1){
-        t = FREQ_TO_US(frequency)/2;
         digitalWrite(FREQ_PIN, 1);      // Turn on
         usleep(t);                      // Wait for half the period
         digitalWrite(FREQ_PIN, 0);      // Turn off
