@@ -8,3 +8,9 @@ Steper motori će biti povezani na RasPi uz pomoć A4988 drajvera. Kernel modul 
 Potrebno je realizovati modul koji služi za kontrolu step motora u zavisnosti od zadate komande, tako da motori proizvode odgovarajući zvuk. 
 Motore povezati na RPI uz pomoć A4988 kontrolera. Vezu između RPI i A4988 ostvariti kroz GPIO prolaze na RPI. 
 Omogućiti da korisnička aplikacija učitava sadržaj u MIDI formatu (iz datoteke ili spoljnog uređaja) i zadaje zvuk koji je potrebno svirati kroz operaciju upisa u čvor napravljenog modula.
+
+## Potrebne biblioteke
+Pre kompajliranja je potrebno instalirati biblioteku libasound2-dev
+```bash
+sudo apt-get install libasound2-dev
+```
