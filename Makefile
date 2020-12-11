@@ -7,26 +7,11 @@ LD = gcc
 INC = -I inc
 CFLAGS = -Wall
 LIBDIR =
-LIB = -lpthread
-LDFLAGS = -static
+LIB = -lpthread -lasound
+LDFLAGS = #-static
 
 SRC = src
 
-#----------------------------------------------------------------------
-#-------------------- Makefile Debug configuration --------------------
-#----------------------------------------------------------------------
-INC_DEBUG = $(INC)
-CFLAGS_DEBUG = $(CFLAGS) -g
-RESINC_DEBUG = $(RESINC)
-RCFLAGS_DEBUG = $(RCFLAGS)
-LIBDIR_DEBUG = $(LIBDIR)
-LIB_DEBUG = $(LIB)
-LDFLAGS_DEBUG = $(LDFLAGS)
-OBJDIR_DEBUG = obj/Debug
-DEP_DEBUG =
-OUT_DEBUG = bin/Debug/steppatron
-
-OBJ_DEBUG = $(OBJDIR_DEBUG)/steppatron.o
 
 #----------------------------------------------------------------------
 #------------------- Makefile Release configuration -------------------
@@ -38,9 +23,9 @@ RCFLAGS_RELEASE = $(RCFLAGS)
 LIBDIR_RELEASE = $(LIBDIR)
 LIB_RELEASE = $(LIB)
 LDFLAGS_RELEASE = $(LDFLAGS)
-OBJDIR_RELEASE = obj/Release
+OBJDIR_RELEASE = obj
 DEP_RELEASE =
-OUT_RELEASE = bin/Release/steppatron
+OUT_RELEASE = bin/steppatron.out
 
 OBJ_RELEASE = $(OBJDIR_RELEASE)/steppatron.o
 
@@ -49,33 +34,9 @@ OBJ_RELEASE = $(OBJDIR_RELEASE)/steppatron.o
 #------------------------------- Targets ------------------------------
 #----------------------------------------------------------------------
 
-all: debug release
+all: release
 
-clean: clean_debug clean_release
-
-
-#------------------------------------------------------------------
-#-------------------------- BUILD DEBUG ---------------------------
-#------------------------------------------------------------------
-
-debug: before_debug out_debug after_debug
-
-before_debug:
-	test -d bin/Debug || mkdir -p bin/Debug
-	test -d $(OBJDIR_DEBUG) || mkdir -p $(OBJDIR_DEBUG)
-
-out_debug: $(OBJ_DEBUG) $(DEP_DEBUG)
-	$(LD) $(LIBDIR_DEBUG) -o $(OUT_DEBUG) $(OBJ_DEBUG)  $(LDFLAGS_DEBUG) $(LIB_DEBUG)
-
-$(OBJDIR_DEBUG)/steppatron.o: $(SRC)/steppatron.c
-	$(CXX) $(CFLAGS_DEBUG) $(INC_DEBUG) -c $(SRC)/steppatron.c -o $(OBJDIR_DEBUG)/steppatron.o
-
-after_debug:
-
-clean_debug:
-	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
-	rm -rf bin/Debug
-	rm -rf $(OBJDIR_DEBUG)
+clean: clean_release
 
 #------------------------------------------------------------------
 #------------------------- BUILD RELEASE --------------------------
@@ -84,7 +45,7 @@ clean_debug:
 release: before_release out_release after_release
 
 before_release:
-	test -d bin/Release || mkdir -p bin/Release
+	test -d bin || mkdir -p bin
 	test -d $(OBJDIR_RELEASE) || mkdir -p $(OBJDIR_RELEASE)
 
 out_release: before_release $(OBJ_RELEASE) $(DEP_RELEASE)
@@ -97,8 +58,8 @@ after_release:
 
 clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)
-	rm -rf bin/Release
+	rm -rf bin
 	rm -rf $(OBJDIR_RELEASE)
 
-.PHONY: before_debug after_debug clean_debug before_release after_release clean_release
+.PHONY: before_release after_release clean_release
 

@@ -3,6 +3,11 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=c
 
 ### C ###
+
+# Folders
+!bin/
+!obj/
+
 # Prerequisites
 *.d
 
