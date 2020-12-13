@@ -198,7 +198,7 @@ void readTrack(midiTrack_t *track) {
 
 void readMidiData(midiData_t *midiData) {
     readHeader(&midiData->header);
-    midiData->tracks = malloc(sizeof(midiTrack_t));
+    midiData->tracks = malloc(sizeof(midiTrack_t) * midiData->header.trackN);
     for (size_t i = 0; i < midiData->header.trackN; i++) {
         readTrack(&midiData->tracks[i]);
     }
