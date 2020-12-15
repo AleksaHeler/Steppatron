@@ -290,7 +290,7 @@ int main(int argc, char **argv) {
 
     if (file_desc < 0) {
         printf("Error, %s not opened\n", FILE_NAME);
-        return -1;
+        return EXIT_FAILURE;
     }
 
     if (argc == 1 || strcmp(argv[1], "u") == 0) {
