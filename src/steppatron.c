@@ -298,8 +298,9 @@ void rawmidiClose(snd_rawmidi_t *handler) {
 }
 
 // Gets the next command to be sent to the steppatron driver
+// from the RawMIDI interface
 // Returns 0 on faliure, note number on success
-int getRawmidiCommand(char* buffer, snd_rawmidi_t *handler) {
+int getRawmidiCommand(char* command, snd_rawmidi_t *handler) {
     midiMessage_t message;
     int byte = readUsbMessage(&message, handler);
     if (byte != -1) {
@@ -309,18 +310,17 @@ int getRawmidiCommand(char* buffer, snd_rawmidi_t *handler) {
 
     switch (message.type) {
     case MSG_NOTE_ON:
-        buffer[1] = message.param1;
+        command[1] = message.param1;
         break;
     case MSG_NOTE_OFF:
-        buffer[1] = 0xFF;
+        command[1] = 0xFF;
         break;
     default:
         return 0;
     }
-    fflush(stdout);
 
     // TODO - procesovanje sa vise steppera
-    buffer[0] = 0;
+    command[0] = 0;
 
     return message.param1;
 }
