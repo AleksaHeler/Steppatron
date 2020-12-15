@@ -4,6 +4,8 @@
 
 ### C ###
 
+.vscode
+
 # Folders
 !bin/
 !obj/
