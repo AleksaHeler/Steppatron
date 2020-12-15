@@ -1,6 +1,7 @@
 #include <alsa/asoundlib.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // RawMidi ALSA hardware port to be used
 #define MIDI_PORT "hw:1,0,0"
@@ -278,8 +279,11 @@ int readUsbMessage(midiMessage_t* message, snd_rawmidi_t* device) {
     return -1;
 }
 
+// Arguments:
+// 1. - u for USB, k for keyboard, f for file
+// 2. - filename
 int main(int argc, char **argv) {
-    if (argc == 1) {
+    if (argc == 1 || strcmp(argv[1], "u") == 0) {
         // Read from USB
         snd_rawmidi_t *midiIn;
         if (snd_rawmidi_open(&midiIn, NULL, MIDI_PORT, SND_RAWMIDI_SYNC) < 0) {
@@ -310,9 +314,10 @@ int main(int argc, char **argv) {
 
         snd_rawmidi_close(midiIn);
         midiIn = NULL;
-    } else {
+
+    } else if (strcmp(argv[1], "f") == 0 && argc > 2) {
         // Read from file
-        midiFile = fopen(argv[1], "rb");
+        midiFile = fopen(argv[2], "rb");
         if (midiFile == NULL) {
             fprintf(stderr, "Error while opening file %s\n", argv[1]);
             return EXIT_FAILURE;
@@ -322,6 +327,15 @@ int main(int argc, char **argv) {
 
         fclose(midiFile);
         freeMidiData(&midiData);
+
+    } else if (strcmp(argv[1], "k") == 0) {
+        // Read from keyboard
+
+
+    } else {
+        printf("Invalid arguments!\n");
+        printf("Use: steppatron [MODE] [FILENAME]\n");
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;
