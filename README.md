@@ -15,9 +15,10 @@ Pre kompajliranja je potrebno instalirati biblioteku libasound2-dev
 sudo apt-get install libasound2-dev
 ```
 ## TODO
-Aleksa:
+> Aleksa:
 - [x] gpio_driver.c (copy-paste sa vezbi sa led lampicama)
-- [ ] Prilagoditi tajmer i pinove gpio_driver.c
 - [ ] Omoguciti citanje i pisanje u node
+- [ ] Prilagoditi pinove gpio_driver.c
+- [ ] Namesiti funkcije za pwm
 - [ ] Parametrizovati driver
 - [ ] Omoguciti vise steppera
