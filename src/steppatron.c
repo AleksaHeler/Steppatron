@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "MIDITable.h"
 
 // Output file name
 #define FILE_NAME "testFile.txt"
