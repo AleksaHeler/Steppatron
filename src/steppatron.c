@@ -310,11 +310,9 @@ int getRawmidiCommand(char* buffer, snd_rawmidi_t *handler) {
     switch (message.type) {
     case MSG_NOTE_ON:
         buffer[1] = message.param1;
-        printf("%d ON\n", message.param1);
         break;
     case MSG_NOTE_OFF:
         buffer[1] = 0xFF;
-        printf("%d OFF\n", message.param1);
         break;
     default:
         return 0;
