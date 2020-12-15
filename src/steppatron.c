@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // Output file name
 #define FILE_NAME "testFile.txt"
@@ -282,6 +283,50 @@ int readUsbMessage(midiMessage_t* message, snd_rawmidi_t* device) {
     return -1;
 }
 
+// Initializes the RawMIDI interface
+void rawmidiInit(snd_rawmidi_t *handler) {
+    if (snd_rawmidi_open(&handler, NULL, MIDI_PORT, SND_RAWMIDI_SYNC) < 0) {
+        fprintf(stderr, "Cannot open port: %s\n", MIDI_PORT);
+        exitError("Error while opening midi port!");
+    }
+}
+
+// Closes the RawMIDI interface
+void rawmidiClose(snd_rawmidi_t *handler) {
+    snd_rawmidi_close(handler);
+    handler = NULL;
+}
+
+// Gets the next command to be sent to the steppatron driver
+// Returns 0 on faliure, note number on success
+int getRawmidiCommand(char* buffer, snd_rawmidi_t *handler) {
+    midiMessage_t message;
+    int byte = readUsbMessage(&message, handler);
+    if (byte != -1) {
+        fprintf(stderr, "Invalid byte read: %d\n", byte);
+        return 0;
+    }
+
+    switch (message.type) {
+    case MSG_NOTE_ON:
+        buffer[1] = message.param1;
+        printf("%d ON\n", message.param1);
+        break;
+    case MSG_NOTE_OFF:
+        buffer[1] = 0xFF;
+        printf("%d OFF\n", message.param1);
+        break;
+    default:
+        return 0;
+    }
+    fflush(stdout);
+
+    // TODO - procesovanje sa vise steppera
+    buffer[0] = 0;
+
+    return message.param1;
+}
+
 // Arguments:
 // 1. - u for USB, k for keyboard, f for file
 // 2. - filename
@@ -296,34 +341,20 @@ int main(int argc, char **argv) {
     if (argc == 1 || strcmp(argv[1], "u") == 0) {
         // Read from USB
         snd_rawmidi_t *midiIn;
-        if (snd_rawmidi_open(&midiIn, NULL, MIDI_PORT, SND_RAWMIDI_SYNC) < 0) {
-            fprintf(stderr, "Cannot open port: %s\n", MIDI_PORT);
-            exitError("Error while opening midi port!");
-        }
+        rawmidiInit(midiIn);
 
-        midiMessage_t message;
-        int byte;
-        while (1) {
-            byte = readUsbMessage(&message, midiIn);
-            if (byte != -1) {
-                fprintf(stderr, "Invalid byte read: %d\n", byte);
-                continue;
+        char buffer[2];
+        if (getRawmidiCommand(buffer, midiIn)) {
+            // Send to file
+            int ret_val = write(file_desc, buffer, 2);
+
+            if (ret_val == 0) {
+                printf("Error writing to file\n");
+                close(file_desc);
+                return EXIT_FAILURE;
             }
-
-            switch (message.type) {
-            case MSG_NOTE_ON:
-                printf("%d ON\n", message.param1);
-                break;
-            case MSG_NOTE_OFF:
-                printf("%d OFF\n", message.param1);
-                break;
-            }
-
-            fflush(stdout);
         }
-
-        snd_rawmidi_close(midiIn);
-        midiIn = NULL;
+        rawmidiClose(midiIn);
 
     } else if (strcmp(argv[1], "f") == 0 && argc > 2) {
         // Read from file
