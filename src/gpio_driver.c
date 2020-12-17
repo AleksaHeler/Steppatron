@@ -1,3 +1,28 @@
+// GPIO 23 - step (todo: parametrize this and stepper number)
+// GPIo 24 - direction
+// 
+// User can write two bytes to node:
+//   - [0] stepper index (char for now)
+//   - [1] midi note index (byte)
+// Example (hex):
+//   - 00 12 (stepper 0 plays note index 0x12)
+// 
+// When user writes that stepper starts playing that tone
+// When user sends note 0xFF that stepper stops playing
+// 
+// User can read all steppers and tones they produce
+// Example (hex):
+//   - 00 12
+//   - 01 FF (stepper not playing anything)
+//
+// Driver parameters:
+//   - Stepper number
+//   - 1st stepper pin
+//   - 2nd stepper pin
+//   - ...
+//   - Nth stepper pin
+
+/* Libraries */
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -13,10 +38,6 @@
 #include <linux/hrtimer.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-
-// timer interval defined as (TIMER_SEC + TIMER_NANO_SEC)
-#define TIMER_SEC    0
-#define TIMER_NANO_SEC  1000*1000 /* 1ms */
 
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
@@ -55,6 +76,8 @@
 #define GPPUDCLK1_OFFSET (0x0000009C)
 
 typedef enum {PULL_NONE = 0, PULL_DOWN = 1, PULL_UP = 2} PUD;
+//000 = GPIO Pin 'x' is an input
+//001 = GPIO Pin 'x' is an output
 typedef enum {GPIO_DIRECTION_IN = 0, GPIO_DIRECTION_OUT = 1} DIRECTION;
 
 /* GPIO pins available on connector p1. */
@@ -102,10 +125,19 @@ struct file_operations gpio_driver_fops =
     write   :   gpio_driver_write
 };
 
+/* Structure that declares information for one stepper */
+struct stepper_info {
+    char index;
+    char note;
+};
+
 /* Declaration of the init and exit functions. */
 module_init(gpio_driver_init);
 module_exit(gpio_driver_exit);
 
+// TODO: make this array, parametrize it and dynamically allocate
+/* Stepper info: index + note playing */
+stepper_info stepper;
 /* Major number. */
 int gpio_driver_major;
 /* Buffer to store data. */
@@ -114,10 +146,19 @@ char* gpio_driver_buffer;
 /* Blink timer vars. */
 static struct hrtimer pwm_timer;
 static ktime_t kt;
-
 /* Virtual address where the physical GPIO address is mapped */
 void* virt_gpio_base;
 
+/*
+ * GetGPFSELReg function
+ *  Parameters:
+ *   pin    - number of GPIO pin;
+ *
+ *   return - GPFSELn offset from GPIO base address, for containing desired pin control
+ *  Operation:
+ *   Based on the passed GPIO pin number, finds the corresponding GPFSELn reg and
+ *   returns its offset from GPIO base address.
+ */
 unsigned int GetGPFSELReg(char pin)
 {
     unsigned int addr;
@@ -136,6 +177,16 @@ unsigned int GetGPFSELReg(char pin)
   return addr;
 }
 
+/*
+ * GetGPIOPinOffset function
+ *  Parameters:
+ *   pin    - number of GPIO pin;
+ *
+ *   return - offset of the pin control bit, position in control registers
+ *  Operation:
+ *   Based on the passed GPIO pin number, finds the position of its control bit
+ *   in corresponding control registers.
+ */
 char GetGPIOPinOffset(char pin)
 {
     if(pin >= 0 && pin <10)
@@ -153,6 +204,15 @@ char GetGPIOPinOffset(char pin)
     return pin;
 }
 
+/*
+ * SetInternalPullUpDown function
+ *  Parameters:
+ *   pin    - number of GPIO pin;
+ *   pull   - set internal pull up/down/none if PULL_UP/PULL_DOWN/PULL_NONE selected
+ *  Operation:
+ *   Sets to use internal pull-up or pull-down resistor, or not to use it if pull-none
+ *   selected for desired GPIO pin.
+ */
 void SetInternalPullUpDown(char pin, PUD pull)
 {
     unsigned int gppud_offset;
@@ -160,98 +220,161 @@ void SetInternalPullUpDown(char pin, PUD pull)
     unsigned int tmp;
     unsigned int mask;
 
+    /* Get the offset of GPIO Pull-up/down Register (GPPUD) from GPIO base address. */
     gppud_offset = GPPUD_OFFSET;
+    /* Get the offset of GPIO Pull-up/down Clock Register (GPPUDCLK) from GPIO base address. */
     gppudclk_offset = (pin < 32) ? GPPUDCLK0_OFFSET : GPPUDCLK1_OFFSET;
+    /* Get pin offset in register . */
     pin = (pin < 32) ? pin : pin - 32;
+    /* Write to GPPUD to set the required control signal (i.e. Pull-up or Pull-Down or neither
+       to remove the current Pull-up/down). */
     iowrite32(pull, virt_gpio_base + gppud_offset);
+    /* Wait 150 cycles � this provides the required set-up time for the control signal */
+    /* Write to GPPUDCLK0/1 to clock the control signal into the GPIO pads you wish to
+       modify � NOTE only the pads which receive a clock will be modified, all others will
+       retain their previous state. */
     tmp = ioread32(virt_gpio_base + gppudclk_offset);
     mask = 0x1 << pin;
     tmp |= mask;
     iowrite32(tmp, virt_gpio_base + gppudclk_offset);
+    /* Wait 150 cycles � this provides the required hold time for the control signal */
+    /* Write to GPPUD to remove the control signal. */
     iowrite32(PULL_NONE, virt_gpio_base + gppud_offset);
+    /* Write to GPPUDCLK0/1 to remove the clock. */
     tmp = ioread32(virt_gpio_base + gppudclk_offset);
     mask = 0x1 << pin;
     tmp &= (~mask);
     iowrite32(tmp, virt_gpio_base + gppudclk_offset);
 }
 
+/*
+ * SetGpioPinDirection function
+ *  Parameters:
+ *   pin       - number of GPIO pin;
+ *   direction - GPIO_DIRECTION_IN or GPIO_DIRECTION_OUT
+ *  Operation:
+ *   Sets the desired GPIO pin to be used as input or output based on the direcation value.
+ */
 void SetGpioPinDirection(char pin, DIRECTION direction)
 {
     unsigned int GPFSELReg_offset;
     unsigned int tmp;
     unsigned int mask;
 
+    /* Get base address of function selection register. */
     GPFSELReg_offset = GetGPFSELReg(pin);
+    /* Calculate gpio pin offset. */
     pin = GetGPIOPinOffset(pin);
+    /* Set gpio pin direction. */
     tmp = ioread32(virt_gpio_base + GPFSELReg_offset);
-    if(direction) { //set as output: set 1
+    if(direction)
+    { //set as output: set 1
       mask = 0x1 << (pin*3);
       tmp |= mask;
     }
-    else { //set as input: set 0
+    else
+    { //set as input: set 0
       mask = ~(0x1 << (pin*3));
       tmp &= mask;
     }
     iowrite32(tmp, virt_gpio_base + GPFSELReg_offset);
 }
 
+/*
+ * SetGpioPin function
+ *  Parameters:
+ *   pin       - number of GPIO pin;
+ *  Operation:
+ *   Sets the desired GPIO pin to HIGH level. The pin should previously be defined as output.
+ */
 void SetGpioPin(char pin)
 {
     unsigned int GPSETreg_offset;
     unsigned int tmp;
     
+    /* Get base address of gpio set register. */
     GPSETreg_offset = (pin < 32) ? GPSET0_OFFSET : GPSET1_OFFSET;
     pin = (pin < 32) ? pin : pin - 32;
+    /* Set gpio. */
     tmp = 0x1 << pin;
     iowrite32(tmp, virt_gpio_base + GPSETreg_offset);
 }
 
+/*
+ * ClearGpioPin function
+ *  Parameters:
+ *   pin       - number of GPIO pin;
+ *  Operation:
+ *   Sets the desired GPIO pin to LOW level. The pin should previously be defined as output.
+ */
 void ClearGpioPin(char pin)
 {
     unsigned int GPCLRreg_offset;
     unsigned int tmp;
     
+    /* Get base address of gpio clear register. */
     GPCLRreg_offset = (pin < 32) ? GPCLR0_OFFSET : GPCLR1_OFFSET;
     pin = (pin < 32) ? pin : pin - 32;
+
+    /* Clear gpio. */
     tmp = 0x1 << pin;
     iowrite32(tmp, virt_gpio_base + GPCLRreg_offset);
 }
 
+/*
+ * GetGpioPinValue function
+ *  Parameters:
+ *   pin       - number of GPIO pin;
+ *
+ *   return    - the level read from desired GPIO pin
+ *  Operation:
+ *   Reads the level from the desired GPIO pin and returns the read value.
+ */
 char GetGpioPinValue(char pin)
 {
     unsigned int GPLEVreg_offset;
     unsigned int tmp;
     unsigned int mask;
 
+    /* Get base address of gpio level register. */
     GPLEVreg_offset = (pin < 32) ?  GPLEV0_OFFSET : GPLEV1_OFFSET;
     pin = (pin < 32) ? pin : pin - 32;
+    /* Read gpio pin level. */
     tmp = ioread32(virt_gpio_base + GPLEVreg_offset);
     mask = 0x1 << pin;
     tmp &= mask;
     return (tmp >> pin);
 }
 
-/* timer callback function called each time the timer expires
-   flashes the LED0, reads the SW0 and prints its value to kernel log */
+/* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     static char power = 0x0;
     static char gpio_12_val;
-
+    // TODO: Parametrize it so it changes only the given stepper
+    // Switch voltage on stepper pin
     power ^= 0x1;
     if (power)
-        SetGpioPin(GPIO_06);
+        SetGpioPin(GPIO_23);
     else
-        ClearGpioPin(GPIO_06);
-    gpio_12_val = GetGpioPinValue(GPIO_12);
-    printk(KERN_INFO "gpio_driver: gpio12 value: %d\n", gpio_12_val);
-
+        ClearGpioPin(GPIO_23);
     hrtimer_forward(&pwm_timer, ktime_get(), kt);
     return HRTIMER_RESTART;
 }
 
+/*
+ * Initialization:
+ *  1. Register device driver
+ *  2. Allocate buffer
+ *  3. Initialize buffer
+ *  4. Map GPIO Physical address space to virtual address
+ *  5. Initialize GPIO pins
+ *  6. Init and start the high resoultion timer
+ */
 int gpio_driver_init(void){
+    // TODO: parametrize driver
     int result = -1;
     printk(KERN_INFO "Inserting gpio_driver module\n");
+    /* Registering device. */
     result = register_chrdev(0, "gpio_driver", &gpio_driver_fops);
     if (result < 0) {
         printk(KERN_INFO "gpio_driver: cannot obtain major number %d\n", gpio_driver_major);
@@ -259,66 +382,122 @@ int gpio_driver_init(void){
     }
     gpio_driver_major = result;
     printk(KERN_INFO "gpio_driver major number is %d\n", gpio_driver_major);
+    /* Allocating memory for the buffer. */
     gpio_driver_buffer = kmalloc(BUF_LEN, GFP_KERNEL);
     if (!gpio_driver_buffer) {
         result = -ENOMEM;
         goto fail_no_mem;
     }
+    /* Initialize data buffer. */
     memset(gpio_driver_buffer, 0, BUF_LEN);
+    /* map the GPIO register space from PHYSICAL address space to virtual address space */
     virt_gpio_base = ioremap(GPIO_BASE, GPIO_ADDR_SPACE_LEN);
     if(!virt_gpio_base)
     {
         result = -ENOMEM;
         goto fail_no_virt_mem;
     }
-    SetGpioPinDirection(GPIO_06, GPIO_DIRECTION_OUT);
-    SetInternalPullUpDown(GPIO_12, PULL_UP);
-    SetGpioPinDirection(GPIO_12, GPIO_DIRECTION_IN);
-    hrtimer_init(&pwm_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-    kt = ktime_set(TIMER_SEC, TIMER_NANO_SEC);
-    pwm_timer.function = &pwm_timer_callback;
-    hrtimer_start(&pwm_timer, kt, HRTIMER_MODE_REL);
+    // TODO: Initialize all stepper pins
+    /* Initialize GPIO pins. */
+    SetGpioPinDirection(GPIO_23, GPIO_DIRECTION_OUT);
+    SetGpioPinDirection(GPIO_24, GPIO_DIRECTION_OUT);
+
+    /* SWitches, we have none */
+    // SetInternalPullUpDown(GPIO_12, PULL_UP);
+    // SetGpioPinDirection(GPIO_12, GPIO_DIRECTION_IN);
 
     return 0;
 
 fail_no_virt_mem:
+    /* Freeing buffer gpio_driver_buffer. */
     if (gpio_driver_buffer)
     {
         kfree(gpio_driver_buffer);
     }
 fail_no_mem:
+    /* Freeing the major number. */
     unregister_chrdev(gpio_driver_major, "gpio_driver");
 
     return result;
 }
 
-void gpio_driver_exit(void){
+/*
+ * Cleanup:
+ *  1. stop the timer
+ *  2. release GPIO pins (clear all outputs, set all as inputs and pull-none to minimize the power consumption)
+ *  3. Unmap GPIO Physical address space from virtual address
+ *  4. Free buffer
+ *  5. Unregister device driver
+ */
+void gpio_driver_exit(void) {
     printk(KERN_INFO "Removing gpio_driver module\n");
+
+    /* Release high resolution timer. */
     hrtimer_cancel(&pwm_timer);
-    ClearGpioPin(GPIO_06);
-    SetGpioPinDirection(GPIO_06, GPIO_DIRECTION_IN);
-    SetInternalPullUpDown(GPIO_12, PULL_NONE);
+
+    /* Clear GPIO pins. */
+    ClearGpioPin(GPIO_23);
+    ClearGpioPin(GPIO_24);
+
+    /* Set GPIO pins as inputs and disable pull-ups. */
+    SetGpioPinDirection(GPIO_23, GPIO_DIRECTION_IN);
+    SetGpioPinDirection(GPIO_24, GPIO_DIRECTION_IN);
+    // SetInternalPullUpDown(GPIO_12, PULL_NONE);
+
+    /* Unmap GPIO Physical address space. */
     if (virt_gpio_base) {
         iounmap(virt_gpio_base);
     }
+
+    /* Freeing buffer gpio_driver_buffer. */
     if (gpio_driver_buffer) {
         kfree(gpio_driver_buffer);
     }
+
+    /* Freeing the major number. */
     unregister_chrdev(gpio_driver_major, "gpio_driver");
 }
 
-static int gpio_driver_open(struct inode *inode, struct file *filp){
+/* File open function. */
+static int gpio_driver_open(struct inode *inode, struct file *filp)
+{
+    // TODO: Initialize driver variables
+
+    // Success. 
     return 0;
 }
 
+/* File close function. */
 static int gpio_driver_release(struct inode *inode, struct file *filp){
+    /* Success. */
     return 0;
 }
 
+/*
+ * File read function
+ *  Parameters:
+ *   filp  - a type file structure;
+ *   buf   - a buffer, from which the user space function (fread) will read;
+ *   len - a counter with the number of bytes to transfer, which has the same
+ *           value as the usual counter in the user space function (fread);
+ *   f_pos - a position of where to start reading the file;
+ *  Operation:
+ *   The gpio_driver_read function transfers data from the driver buffer (gpio_driver_buffer)
+ *   to user space with the function copy_to_user.
+ */
 static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t *f_pos){
+     /* Size of valid data in gpio_driver - data to send in user space. */
     int data_size = 0;
+    /* TODO: fill gpio_driver_buffer here. */
+    // write data about steppers and notes they are playing
+    gpio_driver_buffer[0] = stepper.index;
+    gpio_driver_buffer[1] = stepper.note;
+    gpio_driver_buffer[2] = '\0';
+
     if (*f_pos == 0) {
+        /* Get size of valid data. */
         data_size = strlen(gpio_driver_buffer);
+        /* Send data to user space. */
         if (copy_to_user(buf, gpio_driver_buffer, data_size) != 0) {
             return -EFAULT;
         }
@@ -332,12 +511,40 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
     }
 }
 
+/*
+ * File write function
+ *  Parameters:
+ *   filp  - a type file structure;
+ *   buf   - a buffer in which the user space function (fwrite) will write;
+ *   len - a counter with the number of bytes to transfer, which has the same
+ *           values as the usual counter in the user space function (fwrite);
+ *   f_pos - a position of where to start writing in the file;
+ *  Operation:
+ *   The function copy_from_user transfers the data from user space to kernel space.
+ */
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
+    /* Reset memory. */
     memset(gpio_driver_buffer, 0, BUF_LEN);
+    /* Get data from user space.*/
     if (copy_from_user(gpio_driver_buffer, buf, len) != 0) {
         return -EFAULT;
     }
     else {
+        // TODO: make timer work
+        
+        /* releasing timer to stop previous note */
+        /* Release high resolution timer. */
+        hrtimer_cancel(&pwm_timer);
+
+        /* If needed: initialize high resolution timer. */
+        /* At set frequency */
+        /* ktime_set(TIMER_SEC, TIMER_NANO_SEC); */
+        /* for now gpio_driver_buffer[0] is always 0 */
+        /* only note is passed */
+        /* And for now it will just be # of ms */
+        kt = ktime_set(0, (int)gpio_driver_buffer[1] * 1000000);
+        pwm_timer.function = &pwm_timer_callback;
+        hrtimer_start(&pwm_timer, kt, HRTIMER_MODE_REL);
         return len;
     }
 }
