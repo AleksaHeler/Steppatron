@@ -39,6 +39,11 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
+#include <linux/delay.h>
+
+MODULE_LICENSE("GPL");
+
+
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
 #define GPIO_BASE           (BCM2708_PERI_BASE + 0x200000)
@@ -137,7 +142,7 @@ module_exit(gpio_driver_exit);
 
 // TODO: make this array, parametrize it and dynamically allocate
 /* Stepper info: index + note playing */
-stepper_info stepper;
+struct stepper_info stepper;
 /* Major number. */
 int gpio_driver_major;
 /* Buffer to store data. */
@@ -346,17 +351,28 @@ char GetGpioPinValue(char pin)
     return (tmp >> pin);
 }
 
+
 /* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
+    static int count = 0;
     static char power = 0x0;
-    static char gpio_12_val;
+    //static char gpio_12_val;
     // TODO: Parametrize it so it changes only the given stepper
     // Switch voltage on stepper pin
+
+    if(count++ == 110)
+    {
+        count = 0;
+        return HRTIMER_NORESTART;
+    }
+
     power ^= 0x1;
+
     if (power)
         SetGpioPin(GPIO_23);
     else
         ClearGpioPin(GPIO_23);
+    
     hrtimer_forward(&pwm_timer, ktime_get(), kt);
     return HRTIMER_RESTART;
 }
@@ -405,6 +421,12 @@ int gpio_driver_init(void){
     /* SWitches, we have none */
     // SetInternalPullUpDown(GPIO_12, PULL_UP);
     // SetGpioPinDirection(GPIO_12, GPIO_DIRECTION_IN);
+
+    //Timer init
+    hrtimer_init(&pwm_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+
+    //Direction set
+    SetGpioPin(GPIO_24);
 
     return 0;
 
@@ -522,6 +544,106 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
  *  Operation:
  *   The function copy_from_user transfers the data from user space to kernel space.
  */
+
+struct MIDIStruct {
+    const int MIDINumber;
+    const int period;
+};
+
+const struct MIDIStruct MIDITable[88] = {
+//MIDINumber,  period(ms),  note
+    {21, 36.36 * 1000},   //    A0
+    {22, 34.32 * 1000},   // A0/B0
+    {23, 32.40 * 1000},   //    B0
+    {24, 30.58 * 1000},   //    C1
+    {25, 28.86 * 1000},   // C1/D1
+    {26, 27.24 * 1000},   //    D1
+    {27, 25.71 * 1000},   // D1/E1
+    {28, 24.27 * 1000},   //    E1
+    {29, 22.91 * 1000},   //    F1
+    {30, 21.26 * 1000},   // F1/G1
+    {31, 20.41 * 1000},   //    G1
+    {32, 19.26 * 1000},   // G1/A1
+    {33, 18.18 * 1000},   //    A1
+    {34, 17.16 * 1000},   // A1/B1
+    {35, 16.20 * 1000},   //    B1
+    {36, 15.29 * 1000},   //    C2
+    {37, 14.29 * 1000},   // C2/D2
+    {38, 13.62 * 1000},   //    D2
+    {39, 12.86 * 1000},   // D2/E2
+    {40, 12.13 * 1000},   //    E2
+    {41, 11.45 * 1000},   //    F2
+    {42, 10.81 * 1000},   // F2/G2
+    {43, 10.20 * 1000},   //    G2
+    {44, 9.631 * 1000},   // G2/A2
+    {45, 9.091 * 1000},   //    A2
+    {46, 8.581 * 1000},   // A2/B2
+    {47, 8.099 * 1000},   //    B2
+    {48, 7.645 * 1000},   //    C3
+    {49, 7.216 * 1000},   // C3/D3
+    {50, 6.811 * 1000},   //    D3
+    {51, 6.428 * 1000},   // D3/E3
+    {52, 6.068 * 1000},   //    E3
+    {53, 5.727 * 1000},   //    F3
+    {54, 5.405 * 1000},   // F3/G3
+    {55, 5.102 * 1000},   //    G3
+    {56, 4.816 * 1000},   // G3/A3
+    {57, 4.545 * 1000},   //    A3
+    {58, 4.290 * 1000},   // A3/B3
+    {59, 4.050 * 1000},   //    B3
+    {60, 3.822 * 1000},   //    C4
+    {61, 3.608 * 1000},   // C4/D4
+    {62, 3.405 * 1000},   //    D4
+    {63, 3.214 * 1000},   // D4/E4
+    {64, 3.034 * 1000},   //    E4
+    {65, 2.863 * 1000},   //    F4
+    {66, 2.703 * 1000},   // F4/G4
+    {67, 2.551 * 1000},   //    G4
+    {68, 2.408 * 1000},   // G4/A4
+    {69, 2.273 * 1000},   //    A4
+    {70, 2.145 * 1000},   // A4/B4
+    {71, 2.025 * 1000},   //    B4
+    {72, 1.910 * 1000},   //    C5
+    {73, 1.804 * 1000},   // C5/D5
+    {74, 1.703 * 1000},   //    D5
+    {75, 1.607 * 1000},   // D5/E5
+    {76, 1.517 * 1000},   //    E5
+    {77, 1.432 * 1000},   //    F5
+    {78, 1.351 * 1000},   // F5/G5
+    {79, 1.276 * 1000},   //    G5
+    {80, 1.204 * 1000},   // G5/A5
+    {81, 1.136 * 1000},   //    A5
+    {82, 1.073 * 1000},   // A5/B5
+    {83, 1.012 * 1000},   //    B5
+    {84, 0.9556 * 1000},  //    C6
+    {85, 0.9020 * 1000},  // C6/D6
+    {86, 0.8513 * 1000},  //    D6
+    {87, 0.8034 * 1000},  // D6/E6
+    {88, 0.7584 * 1000},  //    E6
+    {89, 0.7159 * 1000},  //    F6
+    {90, 0.6757 * 1000},  // F6/G6
+    {91, 0.6378 * 1000},  //    G6
+    {92, 0.6020 * 1000},  // G6/A6
+    {93, 0.5682 * 1000},  //    A6
+    {94, 0.5363 * 1000},  // A6/B6
+    {95, 0.5062 * 1000},  //    B6
+    {96, 0.4778 * 1000},  //    C7
+    {97, 0.4510 * 1000},  // C7/D7
+    {98, 0.4257 * 1000},  //    D7
+    {99, 0.4018 * 1000},  // D7/E7
+    {100, 0.3792 * 1000}, //    E7
+    {101, 0.3580 * 1000}, //    F7
+    {102, 0.3378 * 1000}, // F7/G7
+    {103, 0.3189 * 1000}, //    G7
+    {104, 0.3010 * 1000}, // G7/A7
+    {105, 0.2841 * 1000}, //    A7
+    {106, 0.2681 * 1000}, // A7/B7
+    {107, 0.2531 * 1000}, //    B7
+    {108, 0.2389 * 1000}  //    C8
+};
+
+
+
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
     /* Reset memory. */
     memset(gpio_driver_buffer, 0, BUF_LEN);
@@ -531,20 +653,31 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
     }
     else {
         // TODO: make timer work
-        
-        /* releasing timer to stop previous note */
-        /* Release high resolution timer. */
-        hrtimer_cancel(&pwm_timer);
 
-        /* If needed: initialize high resolution timer. */
-        /* At set frequency */
-        /* ktime_set(TIMER_SEC, TIMER_NANO_SEC); */
-        /* for now gpio_driver_buffer[0] is always 0 */
-        /* only note is passed */
-        /* And for now it will just be # of ms */
-        kt = ktime_set(0, (int)gpio_driver_buffer[1] * 1000000);
-        pwm_timer.function = &pwm_timer_callback;
-        hrtimer_start(&pwm_timer, kt, HRTIMER_MODE_REL);
-        return len;
+        if(len == 2){ //note        
+            /* releasing timer to stop previous note */
+            /* Release high resolution timer. */
+
+            hrtimer_cancel(&pwm_timer);
+
+            printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
+
+            /* If needed: initialize high resolution timer. */
+            /* At set frequency */
+            /* ktime_set(TIMER_SEC, TIMER_NANO_SEC); */
+            /* for now gpio_driver_buffer[0] is always 0 */
+            /* only note is passed */
+            /* And for now it will just be # of ms */
+
+            kt = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
+            pwm_timer.function = &pwm_timer_callback;
+            hrtimer_start(&pwm_timer, kt, HRTIMER_MODE_REL);
+            
+            return len;
+        }
+        else{
+        }
     }
+
+    return len;        
 }
