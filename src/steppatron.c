@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "MIDITable.h"
+#include "midiParser.h"
 #include "steppaMIDI.h"
 
 // Output file name
@@ -39,16 +39,7 @@ int main(int argc, char **argv) {
 
     } else if (strcmp(argv[1], "f") == 0 && argc > 2) {
         // Read from file
-        midiFile = fopen(argv[2], "rb");
-        if (midiFile == NULL) {
-            fprintf(stderr, "Error while opening file %s\n", argv[1]);
-            return EXIT_FAILURE;
-        }
-
-        readMidiData(&midiData);
-
-        fclose(midiFile);
-        freeMidiData(&midiData);
+        playMidiFile(argv[2]);
 
     } else if (strcmp(argv[1], "k") == 0) {
         // Read from keyboard
