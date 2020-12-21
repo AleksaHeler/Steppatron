@@ -3,7 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 #include "midiParser.h"
-#include "steppaMIDI.h"
+#include "rawMidi.h"
+#include "getch.h"
 
 // Output file name
 #define FILE_NAME "testFile.txt"
