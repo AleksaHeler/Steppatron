@@ -37,7 +37,7 @@
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/io.h>
 
 MODULE_LICENSE("GPL");
