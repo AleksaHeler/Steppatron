@@ -6,8 +6,8 @@
 #include "rawMidi.h"
 #include "getch.h"
 
-// Output file name
-#define FILE_NAME "testFile.txt"
+// Output file name (driver node)
+#define FILE_NAME "/dev/gpio_driver"
 
 // Arguments:
 // 1. - u for USB, k for keyboard, f for file
@@ -55,8 +55,11 @@ int main(int argc, char **argv) {
 
         printf("Start playing notes\n");
 
+        input[0] = 0;
         while (1) {
+            printf("Waiting for input...\n");
             input[1] = getch();
+            printf("Pressed: %c\n", input[1]);
 
             switch (input[1]) {
             //donji red
@@ -109,6 +112,9 @@ int main(int argc, char **argv) {
             }
 
             ret_val = write(file_desc, input, 2);
+            printf("Writing to node:\n");
+            printf("  Stepper: %x\n", input[0]);
+            printf("  Note:    %x\n", input[1]);
 
             if (ret_val == 0) {
                 printf("Error writing to file\n");

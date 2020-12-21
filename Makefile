@@ -24,6 +24,7 @@ CSTEPPATRON := src/steppatron.c
 
 TARGET := gpio_driver.ko
 obj-m := src/gpio_driver.o
+HEADER	= getch.h midi.h midiParser.h rawMidi.h
 MDIR := arch/arm/gpio_driver
 CURRENT := $(shell uname -r)
 KDIR := /lib/modules/$(CURRENT)/build

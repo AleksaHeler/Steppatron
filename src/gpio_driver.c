@@ -1,22 +1,6 @@
-// GPIO 23 - step (todo: parametrize this and stepper number)
-// GPIo 24 - direction
-// 
-// User can write two bytes to node:
-//   - [0] stepper index (char for now)
-//   - [1] midi note index (byte)
-// Example (hex):
-//   - 00 12 (stepper 0 plays note index 0x12)
-// 
-// When user writes that stepper starts playing that tone
-// When user sends note 0xFF that stepper stops playing
-// 
-// User can read all steppers and tones they produce
-// Example (hex):
-//   - 00 12
-//   - 01 FF (stepper not playing anything)
 //
 // Driver parameters:
-//   - Stepper number
+//   - Number of steppers
 //   - 1st stepper pin
 //   - 2nd stepper pin
 //   - ...
@@ -41,7 +25,8 @@
 #include <asm/io.h>
 
 MODULE_LICENSE("GPL");
-
+MODULE_AUTHOR("Marko Đorđević, Radomir Zlatković, Aleksa Heler");
+MODULE_DESCRIPTION("Midi keyboard to stepper motor interface using kernel module");
 
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
@@ -129,29 +114,27 @@ struct file_operations gpio_driver_fops =
     write   :   gpio_driver_write
 };
 
-/* Structure that declares information for one stepper */
-struct stepper_info {
-    char index;
-    char note;
-};
-
 /* Declaration of the init and exit functions. */
 module_init(gpio_driver_init);
 module_exit(gpio_driver_exit);
 
-// TODO: make this array, parametrize it and dynamically allocate
-/* Stepper info: index + note playing */
-struct stepper_info stepper;
-/* Major number. */
-int gpio_driver_major;
-/* Buffer to store data. */
-#define BUF_LEN 80
+// GPIO_23
+/* Storing stepper pins */
+/* Index = stepper index (0, 1, ...), value = GPIO pin */
+#define MAX_STEPPERS 4
+static int steppers[MAX_STEPPERS];
+static int argc = 1;
+module_param_array(steppers, int, &argc, 0000);
+MODULE_PARM_DESC(steppers, "Array of stepper pins");
+
+/* One timer per stepper */
+static struct hrtimer pwm_timers[MAX_STEPPERS];   /* Timers array */
+static ktime_t kt[MAX_STEPPERS];
+
+int gpio_driver_major;              /* Major number. */
+#define BUF_LEN 80                  /* Buffer to store data. */
 char* gpio_driver_buffer;
-/* Blink timer vars. */
-static struct hrtimer pwm_timer;
-static ktime_t kt;
-/* Virtual address where the physical GPIO address is mapped */
-void* virt_gpio_base;
+void* virt_gpio_base;               /* Virtual address where the physical GPIO address is mapped */
 
 /*
  * GetGPFSELReg function
@@ -355,10 +338,10 @@ char GetGpioPinValue(char pin)
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     static int count = 0;
     static char power = 0x0;
-    //static char gpio_12_val;
-    // TODO: Parametrize it so it changes only the given stepper
-    // Switch voltage on stepper pin
 
+    /* TODO: Make this function change only the stepper it is assigned to from stepper array */
+    
+    /* Switch voltage on stepper pin */
     if(count++ == 110)
     {
         count = 0;
@@ -368,11 +351,11 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     power ^= 0x1;
 
     if (power)
-        SetGpioPin(GPIO_23);
+        SetGpioPin(steppers[0]);
     else
-        ClearGpioPin(GPIO_23);
+        ClearGpioPin(steppers[0]);
     
-    hrtimer_forward(&pwm_timer, ktime_get(), kt);
+    hrtimer_forward(&pwm_timers[0], ktime_get(), kt[0]);
     return HRTIMER_RESTART;
 }
 
@@ -386,25 +369,31 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
  *  6. Init and start the high resoultion timer
  */
 int gpio_driver_init(void){
-    // TODO: parametrize driver
     int result = -1;
+    int i;
+
     printk(KERN_INFO "Inserting gpio_driver module\n");
+
     /* Registering device. */
     result = register_chrdev(0, "gpio_driver", &gpio_driver_fops);
     if (result < 0) {
         printk(KERN_INFO "gpio_driver: cannot obtain major number %d\n", gpio_driver_major);
         return result;
     }
+
     gpio_driver_major = result;
     printk(KERN_INFO "gpio_driver major number is %d\n", gpio_driver_major);
+
     /* Allocating memory for the buffer. */
     gpio_driver_buffer = kmalloc(BUF_LEN, GFP_KERNEL);
     if (!gpio_driver_buffer) {
         result = -ENOMEM;
         goto fail_no_mem;
     }
+
     /* Initialize data buffer. */
     memset(gpio_driver_buffer, 0, BUF_LEN);
+
     /* map the GPIO register space from PHYSICAL address space to virtual address space */
     virt_gpio_base = ioremap(GPIO_BASE, GPIO_ADDR_SPACE_LEN);
     if(!virt_gpio_base)
@@ -412,20 +401,22 @@ int gpio_driver_init(void){
         result = -ENOMEM;
         goto fail_no_virt_mem;
     }
-    // TODO: Initialize all stepper pins
-    /* Initialize GPIO pins. */
-    SetGpioPinDirection(GPIO_23, GPIO_DIRECTION_OUT);
-    SetGpioPinDirection(GPIO_24, GPIO_DIRECTION_OUT);
 
-    /* SWitches, we have none */
-    // SetInternalPullUpDown(GPIO_12, PULL_UP);
-    // SetGpioPinDirection(GPIO_12, GPIO_DIRECTION_IN);
+    /* TODO: Initialize all stepper GPIO pins from array of steppers */
+    printk(KERN_INFO "Steppers:\n");
+    for (i = 0; i < argc; i++)
+    {
+        printk(KERN_INFO "steppers[%d] = %d\n", i, steppers[i]);
+        SetGpioPinDirection(steppers[i], GPIO_DIRECTION_OUT);
+    }
 
     //Timer init
-    hrtimer_init(&pwm_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-
-    //Direction set
-    SetGpioPin(GPIO_24);
+    printk(KERN_INFO "Timers:\n");
+    for (i = 0; i < argc; i++)
+    {
+        hrtimer_init(&pwm_timers[i], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+    }
+    
 
     return 0;
 
@@ -451,19 +442,20 @@ fail_no_mem:
  *  5. Unregister device driver
  */
 void gpio_driver_exit(void) {
+    int i;
+    
     printk(KERN_INFO "Removing gpio_driver module\n");
 
     /* Release high resolution timer. */
-    hrtimer_cancel(&pwm_timer);
+    hrtimer_cancel(&pwm_timers[0]);
 
     /* Clear GPIO pins. */
-    ClearGpioPin(GPIO_23);
-    ClearGpioPin(GPIO_24);
-
-    /* Set GPIO pins as inputs and disable pull-ups. */
-    SetGpioPinDirection(GPIO_23, GPIO_DIRECTION_IN);
-    SetGpioPinDirection(GPIO_24, GPIO_DIRECTION_IN);
-    // SetInternalPullUpDown(GPIO_12, PULL_NONE);
+    for(i = 0; i < argc; i++){
+        /* Set voltage to low */
+        ClearGpioPin(steppers[i]);
+        /* Set GPIO pins as inputs and disable pull-ups. */
+        SetGpioPinDirection(steppers[i], GPIO_DIRECTION_IN);
+    }
 
     /* Unmap GPIO Physical address space. */
     if (virt_gpio_base) {
@@ -507,13 +499,18 @@ static int gpio_driver_release(struct inode *inode, struct file *filp){
  *   to user space with the function copy_to_user.
  */
 static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t *f_pos){
-     /* Size of valid data in gpio_driver - data to send in user space. */
     int data_size = 0;
-    /* TODO: fill gpio_driver_buffer here. */
-    // write data about steppers and notes they are playing
-    gpio_driver_buffer[0] = stepper.index;
-    gpio_driver_buffer[1] = stepper.note;
-    gpio_driver_buffer[2] = '\0';
+
+    /* TODO: User can read all stepper pins */
+    /* Something is not working, 'cat' not returning anything */
+    int i;
+    for (i = 0; i < argc; i++)
+    {
+        gpio_driver_buffer[i*2] = i;
+        gpio_driver_buffer[i*2+1] = steppers[i];
+    }
+    gpio_driver_buffer[i] = '\0';
+    printk(KERN_INFO "Writing %d bytes of stepper pins info to user", strlen(gpio_driver_buffer));
 
     if (*f_pos == 0) {
         /* Get size of valid data. */
@@ -532,17 +529,7 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
     }
 }
 
-/*
- * File write function
- *  Parameters:
- *   filp  - a type file structure;
- *   buf   - a buffer in which the user space function (fwrite) will write;
- *   len - a counter with the number of bytes to transfer, which has the same
- *           values as the usual counter in the user space function (fwrite);
- *   f_pos - a position of where to start writing in the file;
- *  Operation:
- *   The function copy_from_user transfers the data from user space to kernel space.
- */
+
 
 struct MIDIStruct {
     const int MIDINumber;
@@ -641,40 +628,46 @@ const struct MIDIStruct MIDITable[88] = {
     {108, 0.2389 * 1000}  //    C8
 };
 
-
-
+/*
+ * File write function
+ *  Parameters:
+ *   filp  - a type file structure;
+ *   buf   - a buffer in which the user space function (fwrite) will write;
+ *   len - a counter with the number of bytes to transfer, which has the same
+ *           values as the usual counter in the user space function (fwrite);
+ *   f_pos - a position of where to start writing in the file;
+ *  Operation:
+ *   The function copy_from_user transfers the data from user space to kernel space.
+ */
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
-    /* Reset memory. */
+    /* Reset memory */
     memset(gpio_driver_buffer, 0, BUF_LEN);
-    /* Get data from user space.*/
+    /* Get data from user space */
     if (copy_from_user(gpio_driver_buffer, buf, len) != 0) {
         return -EFAULT;
     }
     else {
-        // TODO: make timer work
+        if(len == 2){ // Got a note
+            /* TODO: Make this work on an array of steppers */
+            /* For now we only have one stepper */
 
-        if(len == 2){ //note        
-            /* releasing timer to stop previous note */
-            /* Release high resolution timer. */
+            /* Releasing timer to stop previous note */
+            hrtimer_cancel(&pwm_timers[0]);
 
-            hrtimer_cancel(&pwm_timer);
-
+            /* Print for debug */
             printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
-
-            /* If needed: initialize high resolution timer. */
-            /* At set frequency */
-            /* ktime_set(TIMER_SEC, TIMER_NANO_SEC); */
-            /* for now gpio_driver_buffer[0] is always 0 */
-            /* only note is passed */
-            /* And for now it will just be # of ms */
-
-            kt = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
-            pwm_timer.function = &pwm_timer_callback;
-            hrtimer_start(&pwm_timer, kt, HRTIMER_MODE_REL);
+            
+            /* Set interval for high resolution timer */
+            kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
+            /* Set callback function */
+            pwm_timers[0].function = &pwm_timer_callback;
+            /* Start timer */
+            hrtimer_start(&pwm_timers[0], kt[0], HRTIMER_MODE_REL);
             
             return len;
         }
         else{
+            printk(KERN_INFO "[Error] Received %d bytes, expecting 2", len);
         }
     }
 
