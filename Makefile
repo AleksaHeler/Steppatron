@@ -37,7 +37,6 @@ FLAGS := -g -c -Wall
 LFLAGS := -lpthread -lasound -lwiringPi
 WARN := -W -Wall -Wstrict-prototypes -Wmissing-prototypes
 INCLUDE := -isystem /lib/modules/`uname -r`/build/include
-CFLAGS := -O2 -DMODULE -D__KERNEL__ ${LFLAGS} ${WARN} ${INCLUDE} -static
 
 ######################################################
 ###                      MAKE                      ### make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
@@ -59,8 +58,6 @@ steppatron: $(OSTEPPATRON)
 ###################################################### 
 $(OPWM): $(CPWM)
 	$(CC) $(FLAGS) $(CPWM) -o $(OPWM)
-$(ODRIVER): $(CDRIVER)
-	$(CC) $(CFLAGS) $(CDRIVER) -o $(ODRIVER)
 $(OSTEPPATRON): $(CSTEPPATRON)
 	$(CC) $(FLAGS) $(CSTEPPATRON) -o $(OSTEPPATRON)
 
