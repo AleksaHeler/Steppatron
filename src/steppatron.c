@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
 
         input[0] = 0;
         while (1) {
-            printf("Waiting for input...\n");
             input[1] = getch();
             printf("Pressed: %c\n", input[1]);
 
@@ -112,9 +111,6 @@ int main(int argc, char **argv) {
             }
 
             ret_val = write(file_desc, input, 2);
-            printf("Writing to node:\n");
-            printf("  Stepper: %x\n", input[0]);
-            printf("  Note:    %x\n", input[1]);
 
             if (ret_val == 0) {
                 printf("Error writing to file\n");

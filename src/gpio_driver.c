@@ -1,10 +1,21 @@
-//
-// Driver parameters:
-//   - Number of steppers
-//   - 1st stepper pin
-//   - 2nd stepper pin
-//   - ...
-//   - Nth stepper pin
+// TODO: dodati da FF prekida notu
+// TODO: Dodati komentare
+// TODO: dodati da ima vise tajmera i da zapravo radi vise steppera
+// Todo: videti da se nekako automatizuje major_number prosledjivanje i pravljenje node-a
+// Todo: probati pomeriti sve gpio related u drugi fajl (pa include) 
+// Todo: probati pomeriti sve midi related u drugi fajl (pa include) 
+/*
+ * lsmod                                - izlistavanje
+ * sudo insmod gpio_driver.ko           - ubacivanje
+ * sudo rmmod gpio_driver               - izbacivanje
+ * modinfo gpio_driver                  - info
+ * dmesg -wH                            - real-time log
+ * sudo insmod ... myArray=1,2          - Parametri
+ * sudo mknod /dev/gpio_driver c 239 0  - pravljenje node-a sa major brojem 239
+ * sudo chmod 666 /dev/gpio_driver      - menjanje prava nad node-om
+ * echo "Hello" > /dev/chardev          - Upis u node
+ * cat /dev/chardev                     - Citanje iz node-a
+*/
 
 /* Libraries */
 #include <linux/init.h>
@@ -22,6 +33,7 @@
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/interrupt.h>
 #include <asm/io.h>
 
 MODULE_LICENSE("GPL");
@@ -333,20 +345,22 @@ char GetGpioPinValue(char pin)
     return (tmp >> pin);
 }
 
-
+int ticks = 110;    // dodato
+int count = 0;      // dodato
 /* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
-    static int count = 0;
+    // TODO Ovde uklonjeno nesto 
+    //static int count = 0;
     static char power = 0x0;
 
     /* TODO: Make this function change only the stepper it is assigned to from stepper array */
     
     /* Switch voltage on stepper pin */
-    if(count++ == 1111)
+    /*if(count++ == 1111)
     {
         count = 0;
         return HRTIMER_NORESTART;
-    }
+    }*/
 
     power ^= 0x1;
 
@@ -354,7 +368,11 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
         SetGpioPin(steppers[0]);
     else
         ClearGpioPin(steppers[0]);
-    
+    // dodat ovaj if ispod
+    if(++count == ticks)
+    {
+        return HRTIMER_NORESTART;
+    } 
     hrtimer_forward(&pwm_timers[0], ktime_get(), kt[0]);
     return HRTIMER_RESTART;
 }
@@ -534,98 +552,99 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
 struct MIDIStruct {
     const int MIDINumber;
     const int period;
+    const int ticks;
 };
 
 const struct MIDIStruct MIDITable[88] = {
-//MIDINumber,  period(ms),  note
-    {21, 36.36 * 1000},   //    A0
-    {22, 34.32 * 1000},   // A0/B0
-    {23, 32.40 * 1000},   //    B0
-    {24, 30.58 * 1000},   //    C1
-    {25, 28.86 * 1000},   // C1/D1
-    {26, 27.24 * 1000},   //    D1
-    {27, 25.71 * 1000},   // D1/E1
-    {28, 24.27 * 1000},   //    E1
-    {29, 22.91 * 1000},   //    F1
-    {30, 21.26 * 1000},   // F1/G1
-    {31, 20.41 * 1000},   //    G1
-    {32, 19.26 * 1000},   // G1/A1
-    {33, 18.18 * 1000},   //    A1
-    {34, 17.16 * 1000},   // A1/B1
-    {35, 16.20 * 1000},   //    B1
-    {36, 15.29 * 1000},   //    C2
-    {37, 14.29 * 1000},   // C2/D2
-    {38, 13.62 * 1000},   //    D2
-    {39, 12.86 * 1000},   // D2/E2
-    {40, 12.13 * 1000},   //    E2
-    {41, 11.45 * 1000},   //    F2
-    {42, 10.81 * 1000},   // F2/G2
-    {43, 10.20 * 1000},   //    G2
-    {44, 9.631 * 1000},   // G2/A2
-    {45, 9.091 * 1000},   //    A2
-    {46, 8.581 * 1000},   // A2/B2
-    {47, 8.099 * 1000},   //    B2
-    {48, 7.645 * 1000},   //    C3
-    {49, 7.216 * 1000},   // C3/D3
-    {50, 6.811 * 1000},   //    D3
-    {51, 6.428 * 1000},   // D3/E3
-    {52, 6.068 * 1000},   //    E3
-    {53, 5.727 * 1000},   //    F3
-    {54, 5.405 * 1000},   // F3/G3
-    {55, 5.102 * 1000},   //    G3
-    {56, 4.816 * 1000},   // G3/A3
-    {57, 4.545 * 1000},   //    A3
-    {58, 4.290 * 1000},   // A3/B3
-    {59, 4.050 * 1000},   //    B3
-    {60, 3.822 * 1000},   //    C4
-    {61, 3.608 * 1000},   // C4/D4
-    {62, 3.405 * 1000},   //    D4
-    {63, 3.214 * 1000},   // D4/E4
-    {64, 3.034 * 1000},   //    E4
-    {65, 2.863 * 1000},   //    F4
-    {66, 2.703 * 1000},   // F4/G4
-    {67, 2.551 * 1000},   //    G4
-    {68, 2.408 * 1000},   // G4/A4
-    {69, 2.273 * 1000},   //    A4
-    {70, 2.145 * 1000},   // A4/B4
-    {71, 2.025 * 1000},   //    B4
-    {72, 1.910 * 1000},   //    C5
-    {73, 1.804 * 1000},   // C5/D5
-    {74, 1.703 * 1000},   //    D5
-    {75, 1.607 * 1000},   // D5/E5
-    {76, 1.517 * 1000},   //    E5
-    {77, 1.432 * 1000},   //    F5
-    {78, 1.351 * 1000},   // F5/G5
-    {79, 1.276 * 1000},   //    G5
-    {80, 1.204 * 1000},   // G5/A5
-    {81, 1.136 * 1000},   //    A5
-    {82, 1.073 * 1000},   // A5/B5
-    {83, 1.012 * 1000},   //    B5
-    {84, 0.9556 * 1000},  //    C6
-    {85, 0.9020 * 1000},  // C6/D6
-    {86, 0.8513 * 1000},  //    D6
-    {87, 0.8034 * 1000},  // D6/E6
-    {88, 0.7584 * 1000},  //    E6
-    {89, 0.7159 * 1000},  //    F6
-    {90, 0.6757 * 1000},  // F6/G6
-    {91, 0.6378 * 1000},  //    G6
-    {92, 0.6020 * 1000},  // G6/A6
-    {93, 0.5682 * 1000},  //    A6
-    {94, 0.5363 * 1000},  // A6/B6
-    {95, 0.5062 * 1000},  //    B6
-    {96, 0.4778 * 1000},  //    C7
-    {97, 0.4510 * 1000},  // C7/D7
-    {98, 0.4257 * 1000},  //    D7
-    {99, 0.4018 * 1000},  // D7/E7
-    {100, 0.3792 * 1000}, //    E7
-    {101, 0.3580 * 1000}, //    F7
-    {102, 0.3378 * 1000}, // F7/G7
-    {103, 0.3189 * 1000}, //    G7
-    {104, 0.3010 * 1000}, // G7/A7
-    {105, 0.2841 * 1000}, //    A7
-    {106, 0.2681 * 1000}, // A7/B7
-    {107, 0.2531 * 1000}, //    B7
-    {108, 0.2389 * 1000}  //    C8
+//MIDINumber,  period(ms), ticks_normal
+    {21,      36.36 * 1000,   7},   //    A0
+    {22,      34.32 * 1000,   7},   // A0/B0
+    {23,      32.40 * 1000,   8},   //    B0
+    {24,      30.58 * 1000,   8},   //    C1
+    {25,      28.86 * 1000,   9},   // C1/D1
+    {26,      27.24 * 1000,   9},   //    D1
+    {27,      25.71 * 1000,   10},   // D1/E1
+    {28,      24.27 * 1000,   10},   //    E1
+    {29,      22.91 * 1000,   11},   //    F1
+    {30,      21.26 * 1000,   12},   // F1/G1
+    {31,      20.41 * 1000,   12},   //    G1
+    {32,      19.26 * 1000,   13},   // G1/A1
+    {33,      18.18 * 1000,   14},   //    A1
+    {34,      17.16 * 1000,   15},   // A1/B1
+    {35,      16.20 * 1000,   15},   //    B1
+    {36,      15.29 * 1000,   16},   //    C2
+    {37,      14.29 * 1000,   17},   // C2/D2
+    {38,      13.62 * 1000,   18},   //    D2
+    {39,      12.86 * 1000,   19},   // D2/E2
+    {40,      12.13 * 1000,   21},   //    E2
+    {41,      11.45 * 1000,   22},   //    F2
+    {42,      10.81 * 1000,   23},   // F2/G2
+    {43,      10.20 * 1000,   25},   //    G2
+    {44,      9.631 * 1000,   26},   // G2/A2
+    {45,      9.091 * 1000,   27},   //    A2
+    {46,      8.581 * 1000,   30},   // A2/B2
+    {47,      8.099 * 1000,   31},   //    B2
+    {48,      7.645 * 1000,   33},   //    C3
+    {49,      7.216 * 1000,   35},   // C3/D3
+    {50,      6.811 * 1000,   37},   //    D3
+    {51,      6.428 * 1000,   39},   // D3/E3
+    {52,      6.068 * 1000,   41},   //    E3
+    {53,      5.727 * 1000,   44},   //    F3
+    {54,      5.405 * 1000,   46},   // F3/G3
+    {55,      5.102 * 1000,   49},   //    G3
+    {56,      4.816 * 1000,   52},   // G3/A3
+    {57,      4.545 * 1000,   55},   //    A3
+    {58,      4.290 * 1000,   58},   // A3/B3
+    {59,      4.050 * 1000,   62},   //    B3
+    {60,      3.822 * 1000,   65},   //    C4
+    {61,      3.608 * 1000,   69},   // C4/D4
+    {62,      3.405 * 1000,   73},   //    D4
+    {63,      3.214 * 1000,   78},   // D4/E4
+    {64,      3.034 * 1000,   82},   //    E4
+    {65,      2.863 * 1000,   87},   //    F4
+    {66,      2.703 * 1000,   92},   // F4/G4
+    {67,      2.551 * 1000,   98},   //    G4
+    {68,      2.408 * 1000,   104},   // G4/A4
+    {69,      2.273 * 1000,   110},   //    A4
+    {70,      2.145 * 1000,   117},   // A4/B4
+    {71,      2.025 * 1000,   123},   //    B4
+    {72,      1.910 * 1000,   131},   //    C5
+    {73,      1.804 * 1000,   139},   // C5/D5
+    {74,      1.703 * 1000,   147},   //    D5
+    {75,      1.607 * 1000,   156},   // D5/E5
+    {76,      1.517 * 1000,   165},   //    E5
+    {77,      1.432 * 1000,   175},   //    F5
+    {78,      1.351 * 1000,   185},   // F5/G5
+    {79,      1.276 * 1000,   196},   //    G5
+    {80,      1.204 * 1000,   208},   // G5/A5
+    {81,      1.136 * 1000,   220},   //    A5
+    {82,      1.073 * 1000,   233},   // A5/B5
+    {83,      1.012 * 1000,   247},   //    B5
+    {84,     0.9556 * 1000,   262},  //    C6
+    {85,     0.9020 * 1000,   277},  // C6/D6
+    {86,     0.8513 * 1000,   294},  //    D6
+    {87,     0.8034 * 1000,   311},  // D6/E6
+    {88,     0.7584 * 1000,   330},  //    E6
+    {89,     0.7159 * 1000,   349},  //    F6
+    {90,     0.6757 * 1000,   370},  // F6/G6
+    {91,     0.6378 * 1000,   392},  //    G6
+    {92,     0.6020 * 1000,   415},  // G6/A6
+    {93,     0.5682 * 1000,   440},  //    A6
+    {94,     0.5363 * 1000,   466},  // A6/B6
+    {95,     0.5062 * 1000,   494},  //    B6
+    {96,     0.4778 * 1000,   523},  //    C7
+    {97,     0.4510 * 1000,   554},  // C7/D7
+    {98,     0.4257 * 1000,   587},  //    D7
+    {99,     0.4018 * 1000,   622},  // D7/E7
+    {100,    0.3792 * 1000,   659}, //    E7
+    {101,    0.3580 * 1000,   698}, //    F7
+    {102,    0.3378 * 1000,   740}, // F7/G7
+    {103,    0.3189 * 1000,   786}, //    G7
+    {104,    0.3010 * 1000,   831}, // G7/A7
+    {105,    0.2841 * 1000,   880}, //    A7
+    {106,    0.2681 * 1000,   932}, // A7/B7
+    {107,    0.2531 * 1000,   988}, //    B7
+    {108,    0.2389 * 1000,   1046}  //    C8
 };
 
 /*
@@ -639,6 +658,7 @@ const struct MIDIStruct MIDITable[88] = {
  *  Operation:
  *   The function copy_from_user transfers the data from user space to kernel space.
  */
+char history = 0; // TODO dodato ovo
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
     /* Reset memory */
     memset(gpio_driver_buffer, 0, BUF_LEN);
@@ -652,12 +672,23 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* For now we only have one stepper */
 
             /* Releasing timer to stop previous note */
+            // dodat ovaj if
+            if(count > 0 && history == gpio_driver_buffer[1])
+            { 
+                count = 0;
+                return len;
+            }
+
+            count = 0; // dodato ovo
             hrtimer_cancel(&pwm_timers[0]);
 
             // If we don't have a stop signal
             if (gpio_driver_buffer[1] != 0xFF) {
                 /* Print for debug */
-                printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[gpio_driver_buffer[1] - 21].period);
+                //printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[gpio_driver_buffer[1] - 21].period);
+                printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
+                /*Count limit*/
+                ticks = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks;
                 
                 /* Set interval for high resolution timer */
                 kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
