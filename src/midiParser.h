@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include "midi.h"
+
+#include <unistd.h>
 
 typedef struct {
     unsigned short format;
@@ -43,6 +46,21 @@ typedef struct {
     unsigned char param1;
     unsigned char param2;
 } midiMessage_t;
+
+static inline float msToBpm(unsigned int ms) {
+    return MICROSECONDS_PER_MINUTE / ms;
+}
+
+static inline unsigned int bpmToMs(unsigned int bpm) {
+    return MICROSECONDS_PER_MINUTE / bpm;
+}
+
+static inline unsigned long deltaToNs(unsigned int delta, unsigned int tempo, unsigned short timeDiv) {
+    double retVal = delta;
+    retVal /= timeDiv;
+    retVal *= tempo * 1000;
+    return retVal;
+}
 
 listMidiEvent_t newList() { return (listMidiEvent_t){NULL, NULL}; }
 
@@ -87,7 +105,7 @@ void freeMidiData(midiData_t *data) {
 
 // Reads size bytes from midiFile and outputs the result as a little-endian
 // integer
-unsigned int readInt(char size, FILE *midiFile) {
+unsigned int readInt(int size, FILE *midiFile) {
     if (size > 4)
         return 0;
     unsigned int retVal = 0;
@@ -105,21 +123,21 @@ unsigned int readInt(char size, FILE *midiFile) {
 // little-endian integer
 unsigned int readVarInt(FILE *midiFile) {
     unsigned int retVal = 0;
-    char buffer[4];
+    unsigned char buffer[4];
     int i = 0;
     while (i < 4) {
         fread(buffer + i, 1, 1, midiFile);
-        // If most significant bit is 0
-        if (buffer[i] >= 0) {
+        // If most significant bit is 1
+        if (buffer[i] & 0x80) {
+            // There are more bytes
+            buffer[i] ^= 0x80;
+            i++;
+        } else {
             // This is the last byte
             for (int j = 0; j <= i; j++) {
                 retVal += buffer[j] << (7 * (i - j));
             }
             return retVal;
-        } else {
-            // There are more bytes
-            buffer[i] ^= 0x80;
-            i++;
         }
     }
     return 0;
@@ -223,7 +241,7 @@ int readMidiData(midiData_t *midiData, FILE *midiFile) {
 
 // Reads and plays the midi file
 // Returns 0 on faliure, 1 on success
-int playMidiFile(const char *midiFileName) {
+int playMidiFile(const char *midiFileName, const int outFile) {
     midiData_t midiData;
 
     FILE *midiFile = fopen(midiFileName, "rb");
@@ -245,30 +263,40 @@ int playMidiFile(const char *midiFileName) {
         currEvents[i] = midiData.tracks[i].eventList.first;
     }
 
+    // Ticks per beat
+    unsigned short timeDiv = midiData.header.timediv & 0x7FFF;
     // Time signature (timeSig[0] / 2^timeSig[1]) - default 4/4
-    int timeSig[2] = {4, 2};
+    unsigned char timeSig[2] = {4, 2};
     // Track tempo in microseconds per beat - default 120bpm
-    int tempo = 500000;
+    unsigned int tempo = 500000;
     // Number of tracks finished playing
-    int done = 0;
+    unsigned short done = 0;
+
+    unsigned int minDelta;
+    unsigned char buffer[2];
+    unsigned char currentNote = NOTE_OFF;
 
     while (done < midiData.header.trackN) {
+        minDelta = -1;
         for (int i = 0; i < midiData.header.trackN; i++) {
-            if (currEvents[i] != NULL) {
-                while (currEvents[i] != NULL && currEvents[i]->event.delta == 0) {
-                    // Parse the event
-                    switch (currEvents[i]->event.status) {
+            while (currEvents[i] != NULL && currEvents[i]->event.delta == 0) {
+                // Parse the event
+                switch (currEvents[i]->event.status) {
+                case STATUS_META:
+                    switch (currEvents[i]->event.param1) {
                     case META_TIME_SIGNATURE:
                         // TODO parse the remaining two bytes
                         if (i != 0) fprintf(stderr, "Warning: TimeSig event outside tempo track!\n");
                         timeSig[0] = currEvents[i]->event.data[0];
                         timeSig[1] = currEvents[i]->event.data[1];
+                        printf("Time signature: %d/%d\n", timeSig[0], 1 << timeSig[1]);
                         break;
                     case META_TEMPO:
                         if (i != 0) fprintf(stderr, "Warning: Tempo event outside tempo track!\n");
                         tempo = currEvents[i]->event.data[2];
                         tempo += currEvents[i]->event.data[1] << 8;
                         tempo += currEvents[i]->event.data[0] << 16;
+                        printf("Tempo: %fbpm\n", msToBpm(tempo));
                         break;
                     case META_END_OF_TRACK:
                         done++;
@@ -282,16 +310,49 @@ int playMidiFile(const char *midiFileName) {
                         printf("%.*s\n", currEvents[i]->event.dataSize, currEvents[i]->event.data);
                         break;
                     default:
+                        fprintf(stderr, "Error while parsing meta event\n");
                         break;
                     }
+                    break;
+                case MSG_NOTE_ON:
+                    currentNote = currEvents[i]->event.param1;
+                    buffer[0] = i - 1;
+                    buffer[1] = currentNote;
+                    printf("Note %d on stepper %d ON\n", buffer[1], buffer[0]);
+                    write(outFile, buffer, 2);
+                    break;
+                case MSG_NOTE_OFF:
+                    if (currEvents[i]->event.param1 == currentNote) {
+                        currentNote = NOTE_OFF;
+                        buffer[0] = i - 1;
+                        buffer[1] = NOTE_OFF;
+                        printf("Note on stepper %d OFF\n", buffer[0]);
+                        write(outFile, buffer, 2);
+                    }
+                    break;
+                default:
+                    break;
                 }
+                // Go to next event
                 currEvents[i] = currEvents[i]->next;
             }
+            if (currEvents[i] != NULL && currEvents[i]->event.delta < minDelta) minDelta = currEvents[i]->event.delta;
+        }
+        if (minDelta != -1) {
+            for (int i = 0; i < midiData.header.trackN; i++) {
+                if (currEvents[i] != NULL) currEvents[i]->event.delta -= minDelta;
+            }
+            unsigned long deltaNs = deltaToNs(minDelta, tempo, timeDiv);
+            struct timespec ts;
+            ts.tv_sec = deltaNs / NS_PER_S;
+            ts.tv_nsec = deltaNs % NS_PER_S;
+            nanosleep(&ts, NULL);
+        } else {
+            break;
         }
     }
 
     free(currEvents);
-
     freeMidiData(&midiData);
 
     return 1;

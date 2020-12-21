@@ -1,6 +1,8 @@
 #ifndef MIDI_H
 #define MIDI_H
 
+#define NOTE_OFF 0xFF
+
 // MIDI CONSTANTS
 
 #define HEADER_CHUNK_ID 0x4D546864
@@ -41,9 +43,7 @@
 #define META_KEY_SIGNATURE 0x59
 #define META_SEQUENCER_SPECIFIC_EVENT 0x7F
 
-
-
-struct MIDIStruct {
+    struct MIDIStruct {
     const int MIDINumber;
     const float freq;
     const float period;
@@ -265,5 +265,9 @@ const struct MIDIStruct M[] =
         {104, 3222.4, 0.3010}, // G7/A7
         {106, 3792.3, 0.2681}  // A7/B7
 };
+
+#define MICROSECONDS_PER_MINUTE 60000000
+#define NS_PER_S 1000000000
+
 
 #endif
