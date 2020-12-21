@@ -342,7 +342,7 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     /* TODO: Make this function change only the stepper it is assigned to from stepper array */
     
     /* Switch voltage on stepper pin */
-    if(count++ == 110)
+    if(count++ == 1111)
     {
         count = 0;
         return HRTIMER_NORESTART;
@@ -654,15 +654,18 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* Releasing timer to stop previous note */
             hrtimer_cancel(&pwm_timers[0]);
 
-            /* Print for debug */
-            printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
-            
-            /* Set interval for high resolution timer */
-            kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
-            /* Set callback function */
-            pwm_timers[0].function = &pwm_timer_callback;
-            /* Start timer */
-            hrtimer_start(&pwm_timers[0], kt[0], HRTIMER_MODE_REL);
+            // If we don't have a stop signal
+            if (gpio_driver_buffer[1] != 0xFF) {
+                /* Print for debug */
+                printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[gpio_driver_buffer[1] - 21].period);
+                
+                /* Set interval for high resolution timer */
+                kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
+                /* Set callback function */
+                pwm_timers[0].function = &pwm_timer_callback;
+                /* Start timer */
+                hrtimer_start(&pwm_timers[0], kt[0], HRTIMER_MODE_REL);
+            }
             
             return len;
         }
