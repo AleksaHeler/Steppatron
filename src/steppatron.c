@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
     } else if (strcmp(argv[1], "f") == 0 && argc > 2) {
         // Read from file
-        playMidiFile(argv[2]);
+        playMidiFile(argv[2], file_desc);
 
     } else if (strcmp(argv[1], "k") == 0) {
         // Read from keyboard
