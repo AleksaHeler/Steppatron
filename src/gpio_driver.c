@@ -36,10 +36,9 @@
 #include <linux/ioport.h>
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
-#include <asm/io.h>
-#include <asm/uaccess.h>
-
 #include <linux/delay.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 MODULE_LICENSE("GPL");
 
