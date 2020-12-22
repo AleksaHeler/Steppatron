@@ -372,6 +372,7 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
 
     /* Da ne bi radio beskonacno samo se prekine nakon odredjenog broja periode */
     if(++steppers_ticks[0] == steppers_max_ticks[0]){
+        SetGpioPin(steppers_en[0]); /* Disable stepper */
         return HRTIMER_NORESTART;
     } 
 
@@ -428,7 +429,10 @@ int gpio_driver_init(void){
     {
         printk(KERN_INFO "  [%d]  step_pin: %d    en_pin: %d", i, steppers_step[i], steppers_en[i]);
         SetGpioPinDirection(steppers_step[i], GPIO_DIRECTION_OUT);
+        ClearGpioPin(steppers_step[i]);
+        /* Initially disable steppers */
         SetGpioPinDirection(steppers_en[i], GPIO_DIRECTION_OUT);
+        SetGpioPin(steppers_en[i]);
     }
 
     /* initiate all necessary arrays to default values */
@@ -479,8 +483,10 @@ void gpio_driver_exit(void) {
     for(i = 0; i < steppers_count; i++){
         /* Set voltage to low */
         ClearGpioPin(steppers_step[i]);
+        ClearGpioPin(steppers_en[i]);
         /* Set GPIO pins as inputs and disable pull-ups. */
         SetGpioPinDirection(steppers_step[i], GPIO_DIRECTION_IN);
+        SetGpioPinDirection(steppers_en[i], GPIO_DIRECTION_IN);
     }
 
     /* Unmap GPIO Physical address space. */
@@ -508,8 +514,14 @@ static int gpio_driver_open(struct inode *inode, struct file *filp)
 
 /* File close function. */
 static int gpio_driver_release(struct inode *inode, struct file *filp){
-    /* Stop the timers because no one is writing to node */
+    int i;
+    
+    /* Stop the timers and disable steppers because no one is writing to node */
     hrtimer_cancel(&pwm_timers[0]);
+    for(i = 0; i < steppers_count; i++){
+        SetGpioPin(steppers_en[i]);
+    }
+    
     return 0;
 }
 
@@ -678,14 +690,17 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* Ponovo pocinje merenje vremena za max trajanje note */
             steppers_ticks[0] = 0;
 
-            /* Prekine se prosla nota ako se razlikuje od one koju je do sada svirao*/
+            /* Prekine se prosla nota ako se razlikuje od one koju je do sada svirao */
             if(gpio_driver_buffer[1] != steppers_history[0]){
                 hrtimer_cancel(&pwm_timers[0]);
+                SetGpioPin(steppers_en[0]); /* Disable stepper to stop wasting current */
                 steppers_history[0] = gpio_driver_buffer[1];
             }
 
             /* No stop signal */
             if (gpio_driver_buffer[1] != 0xFF) {
+                /* Enable stepper so it will be able to play the note */
+                ClearGpioPin(steppers_en[0]);
                 /* Print for debug */
                 printk(KERN_INFO "%d -> note %d, period = %d\n", gpio_driver_buffer[0], gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
                 /* Postavi max count na vrednost iz tabele puta 40 da duze traje */
@@ -701,6 +716,8 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* Stop signal [0xFF] */
             else {
                 hrtimer_cancel(&pwm_timers[0]);
+                SetGpioPin(steppers_en[0]); /* Disable stepper to stop wasting current */
+                steppers_history[0] = gpio_driver_buffer[1];
             }
             
             return len;
