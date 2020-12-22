@@ -14,3 +14,7 @@ Pre kompajliranja je potrebno instalirati biblioteku libasound2-dev
 ```bash
 sudo apt-get install libasound2-dev
 ```
+
+## TODO: Dodati uputstvo za run.sh
+
+## TODO: FAQ
