@@ -23,7 +23,7 @@ GRAY='\033[1;30m'
 NC='\033[0m' # No Color
 
 # Library
-if [[ $@ == *"make"* ]]; then
+if [[ $@ == *"lib"* ]]; then
     echo -e "${BLUE}> sudo apt-get install libasound2-dev${GRAY}"
     sudo apt-get install libasound2-dev
 fi
