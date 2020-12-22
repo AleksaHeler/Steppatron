@@ -1,23 +1,20 @@
 #!/bin/bash
-### Compiles code and runs steppatron with char keyboard input ###
-#
-# FIRST CHANGE TO EXECUTABLE: "chmod +x run.sh"
-# then to run: ""./run.sh [make] [keyboard/file/usb] [lib]"
-#    make - does make clean, and make
-#    lib - installs libasound2 library
-#    keyborad/file/usb - steppatron mode
-#
-# What does this file do?
-#   installs libasound2 library
-#   make clean
-#   make
-#   rmmod gpio_driver
-#   mknod /dev/gpio_driver c MAJOR_NUMBER 0
-#   chmod 666 /dev/gpio_driver
-#   insmod gpio_driver
-#   ./steppatron k
+### FIRST CHANGE TO EXECUTABLE: "sudo chmod +x run.sh" ###
+# ./run.sh                      - Bez kompajlovanja samo ucita driver i pokrene steppatron sa tastaturom
+# ./run.sh file filename.mid    - Bez komp, ucita i pokrene citanje iz fajla
+# ./run.sh usb                  - Bez komp, ucita i pokrene sa usb midi klavijaturom
+#   Dodatni opcioni parametri:
+#       make                    - Kompajluje
+#       lib                     - Instalira libasound2 biblioteku
+#       make                    - Kompajluje
 
+### Parameters ###
+STEPPER_COUNT=2
+STEPPER_STEP_PINS=23,24
+STEPPER_EN_PINS=27,22
 MAJOR_NUMBER=239
+
+### Colors ###
 BLUE='\033[0;36m'
 GRAY='\033[1;30m'
 NC='\033[0m' # No Color
@@ -39,24 +36,23 @@ fi
 # Kernel module
 echo -e "${BLUE}> rmmod${GRAY}"
 sudo rmmod /dev/gpio_driver
+echo -e "${BLUE}> rm node${GRAY}"
+sudo rm /dev/gpio_driver
 echo -e "${BLUE}> mknod${GRAY}"
 sudo mknod /dev/gpio_driver c $MAJOR_NUMBER 0
 echo -e "${BLUE}> chmod${GRAY}"
 sudo chmod 666 /dev/gpio_driver
 echo -e "${BLUE}> insmod${GRAY}"
-sudo insmod src/gpio_driver.ko argc=1 steppers=23
+sudo insmod src/gpio_driver.ko steppers_count=$STEPPER_COUNT steppers_step=$STEPPER_STEP_PINS steppers_en=$STEPPER_EN_PINS
 
 # Steppatron application
-if [[ $@ == *"keyboard"* ]]; then
-    echo -e "${BLUE}> steppatron keyboard${NC}"
-    ./bin/steppatron k
-elif [[ $@ == *"file"* ]]; then
+if [[ $@ == *"file"* ]]; then
     echo -e "${BLUE}> steppatron file${NC}"
-    ./bin/steppatron f
+    ./bin/steppatron f $2
 elif [[ $@ == *"usb"* ]]; then
     echo -e "${BLUE}> steppatron usb${NC}"
     ./bin/steppatron u
-else
+else # Default je tastatura
     echo -e "${BLUE}> steppatron keyboard${NC}"
     ./bin/steppatron k
 fi

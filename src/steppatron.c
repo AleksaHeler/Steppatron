@@ -102,13 +102,13 @@ int main(int argc, char **argv) {
             case 'u':
                 input[1] = (char)M[5 * (octave - 1) + 4].MIDINumber;
                 break;
-
-            default:
-                continue;
-            }
-
-            if (input[1] == 'q') {
+            case 'q':  /* Exit */
+                input[1] = 0xFF;
+                write(file_desc, input, 2);
                 close(file_desc);
+                return EXIT_SUCCESS;
+            default: /* Ako se pritisne neodredjen taster, prekinuce ton */
+                input[1] = 0xFF;
                 break;
             }
 

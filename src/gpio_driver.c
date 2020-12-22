@@ -1,20 +1,20 @@
-// TODO: dodati da FF prekida notu
-// TODO: Dodati komentare
-// TODO: dodati da ima vise tajmera i da zapravo radi vise steppera
-// Todo: videti da se nekako automatizuje major_number prosledjivanje i pravljenje node-a
-// Todo: probati pomeriti sve gpio related u drugi fajl (pa include) 
-// Todo: probati pomeriti sve midi related u drugi fajl (pa include) 
 /*
- * lsmod                                - izlistavanje
- * sudo insmod gpio_driver.ko           - ubacivanje
- * sudo rmmod gpio_driver               - izbacivanje
- * modinfo gpio_driver                  - info
- * dmesg -wH                            - real-time log
- * sudo insmod ... myArray=1,2          - Parametri
- * sudo mknod /dev/gpio_driver c 239 0  - pravljenje node-a sa major brojem 239
- * sudo chmod 666 /dev/gpio_driver      - menjanje prava nad node-om
- * echo "Hello" > /dev/chardev          - Upis u node
- * cat /dev/chardev                     - Citanje iz node-a
+ * Parametri kernel modula:
+ *   steppers_count  (int)       - broj steper motora
+ *   steppers_step  (int arr)   - niz pinova na koje su steperi povezani (GPIO_23 bi bio 23 samo)
+ *   steppers_en     (int arr)   - niz pinova za steper enable
+ * 
+ * Cheatsheet:
+ *   lsmod                                - izlistavanje
+ *   sudo insmod gpio_driver.ko           - ubacivanje
+ *   sudo rmmod gpio_driver               - izbacivanje
+ *   modinfo gpio_driver                  - info
+ *   dmesg -wH                            - real-time log
+ *   sudo insmod ... myArray=1,2          - Parametri
+ *   sudo mknod /dev/gpio_driver c 239 0  - pravljenje node-a sa major brojem 239
+ *   sudo chmod 666 /dev/gpio_driver      - menjanje prava nad node-om
+ *   echo "Hello" > /dev/chardev          - Upis u node
+ *   cat /dev/chardev                     - Citanje iz node-a
 */
 
 /* Libraries */
@@ -36,9 +36,13 @@
 #include <linux/interrupt.h>
 #include <asm/io.h>
 
+/* Module info */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Marko Đorđević, Radomir Zlatković, Aleksa Heler");
 MODULE_DESCRIPTION("Midi keyboard to stepper motor interface using kernel module");
+
+/* Najveci broj podrzanih stepera (potrebno za nizove) */
+#define MAX_STEPPERS 4
 
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
@@ -130,14 +134,22 @@ struct file_operations gpio_driver_fops =
 module_init(gpio_driver_init);
 module_exit(gpio_driver_exit);
 
-// GPIO_23
-/* Storing stepper pins */
-/* Index = stepper index (0, 1, ...), value = GPIO pin */
-#define MAX_STEPPERS 4
-static int steppers[MAX_STEPPERS];
-static int argc = 1;
-module_param_array(steppers, int, &argc, 0000);
-MODULE_PARM_DESC(steppers, "Array of stepper pins");
+/* Indeks je broj stepera */
+static int steppers_count = 1;                   /* Broj stepper motora */
+static int steppers_step[MAX_STEPPERS];         /* Step pinovi stepera*/
+static int steppers_en[MAX_STEPPERS];           /* Enable pinovi stepera */
+static int steppers_power[MAX_STEPPERS];        /* Trenutna vrednost napona na pinu */
+static int steppers_history[MAX_STEPPERS];      /* Zadnje svirana nota stepera */
+static int steppers_ticks[MAX_STEPPERS];        /* Merenje vremena da nota ne svira beskonacno */
+static int steppers_max_ticks[MAX_STEPPERS];    /* -||- ovo je max vrednost za ticks */
+
+/* Otkrivanje parametara da korisnik moze postaviti */
+module_param(steppers_count, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(steppers_count, "Broj povezanih steper motora");
+module_param_array(steppers_step, int, &steppers_count, 0000);
+MODULE_PARM_DESC(steppers_step, "Array of stepper step pins");
+module_param_array(steppers_en, int, &steppers_count, 0000);
+MODULE_PARM_DESC(steppers_en, "Array of stepper enable pins");
 
 /* One timer per stepper */
 static struct hrtimer pwm_timers[MAX_STEPPERS];   /* Timers array */
@@ -345,34 +357,24 @@ char GetGpioPinValue(char pin)
     return (tmp >> pin);
 }
 
-int ticks = 110;    // dodato
-int count = 0;      // dodato
 /* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
-    // TODO Ovde uklonjeno nesto 
-    //static int count = 0;
-    static char power = 0x0;
 
     /* TODO: Make this function change only the stepper it is assigned to from stepper array */
     
     /* Switch voltage on stepper pin */
-    /*if(count++ == 1111)
-    {
-        count = 0;
-        return HRTIMER_NORESTART;
-    }*/
+    steppers_power[0] ^= 0x1;
 
-    power ^= 0x1;
-
-    if (power)
-        SetGpioPin(steppers[0]);
+    if (steppers_power[0])
+        SetGpioPin(steppers_step[0]);
     else
-        ClearGpioPin(steppers[0]);
-    // dodat ovaj if ispod
-    if(++count == ticks)
-    {
+        ClearGpioPin(steppers_step[0]);
+
+    /* Da ne bi radio beskonacno samo se prekine nakon odredjenog broja periode */
+    if(++steppers_ticks[0] == steppers_max_ticks[0]){
         return HRTIMER_NORESTART;
     } 
+
     hrtimer_forward(&pwm_timers[0], ktime_get(), kt[0]);
     return HRTIMER_RESTART;
 }
@@ -420,34 +422,40 @@ int gpio_driver_init(void){
         goto fail_no_virt_mem;
     }
 
-    /* TODO: Initialize all stepper GPIO pins from array of steppers */
+    /* Initialize all stepper GPIO pins from array of steppers */
     printk(KERN_INFO "Steppers:\n");
-    for (i = 0; i < argc; i++)
+    for (i = 0; i < steppers_count; i++)
     {
-        printk(KERN_INFO "steppers[%d] = %d\n", i, steppers[i]);
-        SetGpioPinDirection(steppers[i], GPIO_DIRECTION_OUT);
+        printk(KERN_INFO "  [%d]  step_pin: %d    en_pin: %d", i, steppers_step[i], steppers_en[i]);
+        SetGpioPinDirection(steppers_step[i], GPIO_DIRECTION_OUT);
+        SetGpioPinDirection(steppers_en[i], GPIO_DIRECTION_OUT);
+    }
+
+    /* initiate all necessary arrays to default values */
+    for (i = 0; i < steppers_count; i++)
+    {
+        steppers_history[i] = 0xFF;
+        steppers_ticks[i] = 0;
+        steppers_max_ticks[i] = 0;
     }
 
     //Timer init
     printk(KERN_INFO "Timers:\n");
-    for (i = 0; i < argc; i++)
+    for (i = 0; i < steppers_count; i++)
     {
+        printk(KERN_INFO "pwm_timers[%d]", i);
         hrtimer_init(&pwm_timers[i], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     }
-    
 
     return 0;
 
 fail_no_virt_mem:
     /* Freeing buffer gpio_driver_buffer. */
     if (gpio_driver_buffer)
-    {
         kfree(gpio_driver_buffer);
-    }
 fail_no_mem:
     /* Freeing the major number. */
     unregister_chrdev(gpio_driver_major, "gpio_driver");
-
     return result;
 }
 
@@ -468,11 +476,11 @@ void gpio_driver_exit(void) {
     hrtimer_cancel(&pwm_timers[0]);
 
     /* Clear GPIO pins. */
-    for(i = 0; i < argc; i++){
+    for(i = 0; i < steppers_count; i++){
         /* Set voltage to low */
-        ClearGpioPin(steppers[i]);
+        ClearGpioPin(steppers_step[i]);
         /* Set GPIO pins as inputs and disable pull-ups. */
-        SetGpioPinDirection(steppers[i], GPIO_DIRECTION_IN);
+        SetGpioPinDirection(steppers_step[i], GPIO_DIRECTION_IN);
     }
 
     /* Unmap GPIO Physical address space. */
@@ -500,7 +508,8 @@ static int gpio_driver_open(struct inode *inode, struct file *filp)
 
 /* File close function. */
 static int gpio_driver_release(struct inode *inode, struct file *filp){
-    /* Success. */
+    /* Stop the timers because no one is writing to node */
+    hrtimer_cancel(&pwm_timers[0]);
     return 0;
 }
 
@@ -522,10 +531,10 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
     /* TODO: User can read all stepper pins */
     /* Something is not working, 'cat' not returning anything */
     int i;
-    for (i = 0; i < argc; i++)
+    for (i = 0; i < steppers_count; i++)
     {
         gpio_driver_buffer[i*2] = i;
-        gpio_driver_buffer[i*2+1] = steppers[i];
+        gpio_driver_buffer[i*2+1] = steppers_step[i];
     }
     gpio_driver_buffer[i] = '\0';
     printk(KERN_INFO "Writing %d bytes of stepper pins info to user", strlen(gpio_driver_buffer));
@@ -546,8 +555,6 @@ static ssize_t gpio_driver_read(struct file *filp, char *buf, size_t len, loff_t
         return 0;
     }
 }
-
-
 
 struct MIDIStruct {
     const int MIDINumber;
@@ -667,19 +674,22 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
     }
     else {
         if(len == 2){ // Got a note
-            /* TODO: Make this work on an array of steppers */
-            /* For now we only have one stepper */
 
-            count = 0; // dodato ovo
-            hrtimer_cancel(&pwm_timers[0]);
+            /* Ponovo pocinje merenje vremena za max trajanje note */
+            steppers_ticks[0] = 0;
 
-            // If we don't have a stop signal
+            /* Prekine se prosla nota ako se razlikuje od one koju je do sada svirao*/
+            if(gpio_driver_buffer[1] != steppers_history[0]){
+                hrtimer_cancel(&pwm_timers[0]);
+                steppers_history[0] = gpio_driver_buffer[1];
+            }
+
+            /* No stop signal */
             if (gpio_driver_buffer[1] != 0xFF) {
                 /* Print for debug */
-                //printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[gpio_driver_buffer[1] - 21].period);
-                printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
-                /*Count limit*/
-                ticks = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 100;
+                printk(KERN_INFO "%d -> note %d, period = %d\n", gpio_driver_buffer[0], gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
+                /* Postavi max count na vrednost iz tabele puta 40 da duze traje */
+                steppers_max_ticks[0] = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 40;
                 
                 /* Set interval for high resolution timer */
                 kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
@@ -687,6 +697,10 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
                 pwm_timers[0].function = &pwm_timer_callback;
                 /* Start timer */
                 hrtimer_start(&pwm_timers[0], kt[0], HRTIMER_MODE_REL);
+            } 
+            /* Stop signal [0xFF] */
+            else {
+                hrtimer_cancel(&pwm_timers[0]);
             }
             
             return len;

@@ -43,7 +43,7 @@
 #define META_KEY_SIGNATURE 0x59
 #define META_SEQUENCER_SPECIFIC_EVENT 0x7F
 
-    struct MIDIStruct {
+struct MIDIStruct {
     const int MIDINumber;
     const float freq;
     const float period;
