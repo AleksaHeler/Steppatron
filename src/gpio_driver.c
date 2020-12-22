@@ -135,7 +135,7 @@ module_init(gpio_driver_init);
 module_exit(gpio_driver_exit);
 
 /* Indeks je broj stepera */
-static int steppers_count = 1;                   /* Broj stepper motora */
+static int steppers_count = 1;                  /* Broj stepper motora */
 static int steppers_step[MAX_STEPPERS];         /* Step pinovi stepera*/
 static int steppers_en[MAX_STEPPERS];           /* Enable pinovi stepera */
 static int steppers_power[MAX_STEPPERS];        /* Trenutna vrednost napona na pinu */
@@ -155,7 +155,7 @@ MODULE_PARM_DESC(steppers_en, "Array of stepper enable pins");
 static struct hrtimer pwm_timers[MAX_STEPPERS];   /* Timers array */
 static ktime_t kt[MAX_STEPPERS];
 
-int gpio_driver_major;              /* Major number. */
+static int gpio_driver_major;       /* Major number. */
 #define BUF_LEN 80                  /* Buffer to store data. */
 char* gpio_driver_buffer;
 void* virt_gpio_base;               /* Virtual address where the physical GPIO address is mapped */
@@ -515,7 +515,7 @@ static int gpio_driver_open(struct inode *inode, struct file *filp)
 /* File close function. */
 static int gpio_driver_release(struct inode *inode, struct file *filp){
     int i;
-    
+
     /* Stop the timers and disable steppers because no one is writing to node */
     hrtimer_cancel(&pwm_timers[0]);
     for(i = 0; i < steppers_count; i++){

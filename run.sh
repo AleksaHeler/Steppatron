@@ -9,10 +9,10 @@
 #       make                    - Kompajluje
 
 ### Parameters ###
+MODULE="gpio_driver"
 STEPPER_COUNT=2
 STEPPER_STEP_PINS=23,24
 STEPPER_EN_PINS=27,22
-MAJOR_NUMBER=239
 
 ### Colors ###
 BLUE='\033[0;36m'
@@ -33,27 +33,32 @@ if [[ $@ == *"make"* ]]; then
     make
 fi
 
-# Kernel module
-echo -e "${BLUE}> rmmod${GRAY}"
-sudo rmmod /dev/gpio_driver
-echo -e "${BLUE}> rm node${GRAY}"
+# Remove old kernel module, if it exists 
+echo -e "${BLUE}> sudo rmmod gpio_driver${GRAY}"
+sudo rmmod gpio_driver
+echo -e "${BLUE}> sudo rm /dev/gpio_driver${GRAY}"
 sudo rm /dev/gpio_driver
-echo -e "${BLUE}> mknod${GRAY}"
-sudo mknod /dev/gpio_driver c $MAJOR_NUMBER 0
-echo -e "${BLUE}> chmod${GRAY}"
-sudo chmod 666 /dev/gpio_driver
-echo -e "${BLUE}> insmod${GRAY}"
+
+# Insert newly compiled module (throws error if not compiled)
+echo -e "${BLUE}> sudo insmod gpio_driver.ko [with parameters]${GRAY}"
 sudo insmod src/gpio_driver.ko steppers_count=$STEPPER_COUNT steppers_step=$STEPPER_STEP_PINS steppers_en=$STEPPER_EN_PINS
+
+# Make new node with right major number
+MAJOR_NUMBER=`awk "\\$2==\"$MODULE\" {print \\$1}" /proc/devices` # Jedna veoma lepa linija koda
+echo -e "${BLUE}> sudo mknod /dev/gpio_driver c ${MAJOR_NUMBER} 0 ${GRAY}"
+sudo mknod /dev/gpio_driver c $MAJOR_NUMBER 0
+echo -e "${BLUE}> sudo chmod 666 /dev/gpio_driver${GRAY}"
+sudo chmod 666 /dev/gpio_driver
 
 # Steppatron application
 if [[ $@ == *"file"* ]]; then
-    echo -e "${BLUE}> steppatron file${NC}"
+    echo -e "${BLUE}> ./steppatron file${NC}"
     ./bin/steppatron f $2
 elif [[ $@ == *"usb"* ]]; then
-    echo -e "${BLUE}> steppatron usb${NC}"
+    echo -e "${BLUE}> ./steppatron usb${NC}"
     ./bin/steppatron u
 else # Default je tastatura
-    echo -e "${BLUE}> steppatron keyboard${NC}"
+    echo -e "${BLUE}> ./steppatron keyboard${NC}"
     ./bin/steppatron k
 fi
 
