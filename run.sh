@@ -2,9 +2,13 @@
 ### Compiles code and runs steppatron with char keyboard input ###
 #
 # FIRST CHANGE TO EXECUTABLE: "chmod +x run.sh"
-# then to run: ""./run.sh [make] [keyboard] [file] [usb]"
+# then to run: ""./run.sh [make] [keyboard/file/usb] [lib]"
+#    make - does make clean, and make
+#    lib - installs libasound2 library
+#    keyborad/file/usb - steppatron mode
 #
 # What does this file do?
+#   installs libasound2 library
 #   make clean
 #   make
 #   rmmod gpio_driver
@@ -17,6 +21,12 @@ MAJOR_NUMBER=239
 BLUE='\033[0;36m'
 GRAY='\033[1;30m'
 NC='\033[0m' # No Color
+
+# Library
+if [[ $@ == *"make"* ]]; then
+    echo -e "${BLUE}> sudo apt-get install libasound2-dev${GRAY}"
+    sudo apt-get install libasound2-dev
+fi
 
 # Makefile
 if [[ $@ == *"make"* ]]; then
