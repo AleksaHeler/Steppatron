@@ -9,12 +9,6 @@ Potrebno je realizovati modul koji služi za kontrolu step motora u zavisnosti o
 Motore povezati na RPI uz pomoć A4988 kontrolera. Vezu između RPI i A4988 ostvariti kroz GPIO prolaze na RPI. 
 Omogućiti da korisnička aplikacija učitava sadržaj u MIDI formatu (iz datoteke ili spoljnog uređaja) i zadaje zvuk koji je potrebno svirati kroz operaciju upisa u čvor napravljenog modula.
 
-## Potrebne biblioteke
-Pre kompajliranja je potrebno instalirati biblioteku libasound2-dev
-```bash
-sudo apt-get install libasound2-dev
-```
-
 ## TODO: Dodati uputstvo za run.sh
 
 ## TODO: FAQ
