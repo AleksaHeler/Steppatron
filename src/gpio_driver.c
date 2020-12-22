@@ -658,7 +658,6 @@ const struct MIDIStruct MIDITable[88] = {
  *  Operation:
  *   The function copy_from_user transfers the data from user space to kernel space.
  */
-char history = 0; // TODO dodato ovo
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
     /* Reset memory */
     memset(gpio_driver_buffer, 0, BUF_LEN);
@@ -671,14 +670,6 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* TODO: Make this work on an array of steppers */
             /* For now we only have one stepper */
 
-            /* Releasing timer to stop previous note */
-            // dodat ovaj if
-            if(count > 0 && history == gpio_driver_buffer[1])
-            { 
-                count = 0;
-                return len;
-            }
-
             count = 0; // dodato ovo
             hrtimer_cancel(&pwm_timers[0]);
 
@@ -688,7 +679,7 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
                 //printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[gpio_driver_buffer[1] - 21].period);
                 printk(KERN_INFO "note %d, period = %d\n", gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
                 /*Count limit*/
-                ticks = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks;
+                ticks = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 100;
                 
                 /* Set interval for high resolution timer */
                 kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);

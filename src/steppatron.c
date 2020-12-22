@@ -23,16 +23,18 @@ int main(int argc, char **argv) {
     if (argc == 1 || strcmp(argv[1], "u") == 0) {
         // Read from USB
         snd_rawmidi_t *midiIn = NULL;
-        if (rawmidiInit(midiIn)) {
+        if (rawmidiInit(&midiIn)) {
             char buffer[2];
-            if (getRawmidiCommand(buffer, midiIn)) {
-                // Send to file
-                int ret_val = write(file_desc, buffer, 2);
+            for (int i = 0; i < 1000; i++) {
+                if (getRawmidiCommand(buffer, midiIn)) {
+                    // Send to file
+                    int ret_val = write(file_desc, buffer, 2);
 
-                if (ret_val == 0) {
-                    printf("Error writing to file\n");
-                    close(file_desc);
-                    return EXIT_FAILURE;
+                    if (ret_val == 0) {
+                        printf("Error writing to file\n");
+                        close(file_desc);
+                        return EXIT_FAILURE;
+                    }
                 }
             }
             rawmidiClose(midiIn);

@@ -30,8 +30,8 @@ int readUsbMessage(midiMessage_t *message, snd_rawmidi_t *device) {
 }
 
 // Initializes the RawMIDI interface
-int rawmidiInit(snd_rawmidi_t *handler) {
-    if (snd_rawmidi_open(&handler, NULL, MIDI_PORT, SND_RAWMIDI_SYNC) < 0) {
+int rawmidiInit(snd_rawmidi_t **handler) {
+    if (snd_rawmidi_open(handler, NULL, MIDI_PORT, SND_RAWMIDI_SYNC) < 0) {
         fprintf(stderr, "Cannot open port: %s\n", MIDI_PORT);
         return 0;
     }
@@ -44,6 +44,7 @@ void rawmidiClose(snd_rawmidi_t *handler) {
     handler = NULL;
 }
 
+int currNote = NOTE_OFF;
 // Gets the next command to be sent to the steppatron driver
 // from the RawMIDI interface
 // Returns 0 on faliure, note number on success
@@ -60,12 +61,14 @@ int getRawmidiCommand(char *command, snd_rawmidi_t *handler) {
         command[1] = message.param1;
         break;
     case MSG_NOTE_OFF:
+        if (currNote != message.param1) return 0;
         command[1] = 0xFF;
         break;
     default:
         return 0;
     }
 
+    currNote = command[1];
     // TODO - procesovanje sa vise steppera
     command[0] = 0;
 
