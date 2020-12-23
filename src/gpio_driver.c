@@ -704,7 +704,7 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
                 /* Print for debug */
                 printk(KERN_INFO "%d -> note %d, period = %d\n", gpio_driver_buffer[0], gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
                 /* Postavi max count na vrednost iz tabele puta 40 da duze traje */
-                steppers_max_ticks[0] = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 40;
+                steppers_max_ticks[0] = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 80;
                 
                 /* Set interval for high resolution timer */
                 kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
