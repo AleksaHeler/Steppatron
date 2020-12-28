@@ -151,12 +151,11 @@ MODULE_PARM_DESC(steppers_step, "Array of stepper step pins");
 module_param_array(steppers_en, int, &steppers_count, 0000);
 MODULE_PARM_DESC(steppers_en, "Array of stepper enable pins");
 
-/* Encapsulation of hrtimer for passing parameters */
+/* Creating our own structure for encapsulation of hrtimer and index for passing parameters to callback function */
 struct hrtimer_param {
     struct hrtimer timer;
     int stepper_index;
 };
-/* One timer per stepper */
 static struct hrtimer_param pwm_timers[MAX_STEPPERS];   /* Timers array */
 static ktime_t kt[MAX_STEPPERS];
 
@@ -367,6 +366,10 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     struct hrtimer_param *struct_ptr;
     int index;
 
+    /* 'struct hrtimer *param' and 'int index' are encapsulated in my custom 'struct hrtimer_param' */
+    /* So here we get the index of containing structure (parent structure) of given argument 'param' */
+    /* Then we can use that pointer as a normal structure pointer and get the other variable from struct */
+    /* (The index values are assigned in a for loop in function 'gpio_driver_init') */
     struct_ptr = container_of(param, struct hrtimer_param, timer);
     index = struct_ptr->stepper_index;
 
@@ -457,7 +460,8 @@ int gpio_driver_init(void){
     for (i = 0; i < steppers_count; i++)
     {
         printk(KERN_INFO "pwm_timers[%d]", i);
-        /* Setting index in timer encapsulation structure */
+        /* Setting index in our own timer encapsulation structure */
+        /* This is a one time setup */
         pwm_timers[i].stepper_index = i;
         hrtimer_init(&pwm_timers[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     }
