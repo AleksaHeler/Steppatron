@@ -151,8 +151,13 @@ MODULE_PARM_DESC(steppers_step, "Array of stepper step pins");
 module_param_array(steppers_en, int, &steppers_count, 0000);
 MODULE_PARM_DESC(steppers_en, "Array of stepper enable pins");
 
+/* Encapsulation of hrtimer for passing parameters */
+struct hrtimer_param {
+    struct hrtimer timer;
+    int stepper_index;
+};
 /* One timer per stepper */
-static struct hrtimer pwm_timers[MAX_STEPPERS];   /* Timers array */
+static struct hrtimer_param pwm_timers[MAX_STEPPERS];   /* Timers array */
 static ktime_t kt[MAX_STEPPERS];
 
 static int gpio_driver_major;       /* Major number. */
@@ -359,24 +364,28 @@ char GetGpioPinValue(char pin)
 
 /* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
+    struct hrtimer_param *struct_ptr;
+    int index;
 
-    /* TODO: Make this function change only the stepper it is assigned to from stepper array */
-    
+    struct_ptr = container_of(param, struct hrtimer_param, timer);
+    index = struct_ptr->stepper_index;
+
+    //type_name<decltype(ci)>()
     /* Switch voltage on stepper pin */
-    steppers_power[0] ^= 0x1;
+    steppers_power[index] ^= 0x1;
 
-    if (steppers_power[0])
-        SetGpioPin(steppers_step[0]);
+    if (steppers_power[index])
+        SetGpioPin(steppers_step[index]);
     else
-        ClearGpioPin(steppers_step[0]);
+        ClearGpioPin(steppers_step[index]);
 
     /* Da ne bi radio beskonacno samo se prekine nakon odredjenog broja periode */
-    if(++steppers_ticks[0] == steppers_max_ticks[0]){
-        SetGpioPin(steppers_en[0]); /* Disable stepper */
+    if(++steppers_ticks[index] == steppers_max_ticks[index]){
+        SetGpioPin(steppers_en[index]); /* Disable stepper */
         return HRTIMER_NORESTART;
     } 
 
-    hrtimer_forward(&pwm_timers[0], ktime_get(), kt[0]);
+    hrtimer_forward(&pwm_timers[index].timer, ktime_get(), kt[index]);
     return HRTIMER_RESTART;
 }
 
@@ -443,12 +452,14 @@ int gpio_driver_init(void){
         steppers_max_ticks[i] = 0;
     }
 
-    //Timer init
+    /* Timer init */
     printk(KERN_INFO "Timers:\n");
     for (i = 0; i < steppers_count; i++)
     {
         printk(KERN_INFO "pwm_timers[%d]", i);
-        hrtimer_init(&pwm_timers[i], CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+        /* Setting index in timer encapsulation structure */
+        pwm_timers[i].stepper_index = i;
+        hrtimer_init(&pwm_timers[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     }
 
     return 0;
@@ -477,7 +488,7 @@ void gpio_driver_exit(void) {
     printk(KERN_INFO "Removing gpio_driver module\n");
 
     /* Release high resolution timer. */
-    hrtimer_cancel(&pwm_timers[0]);
+    hrtimer_cancel(&pwm_timers[0].timer);
 
     /* Clear GPIO pins. */
     for(i = 0; i < steppers_count; i++){
@@ -517,7 +528,7 @@ static int gpio_driver_release(struct inode *inode, struct file *filp){
     int i;
 
     /* Stop the timers and disable steppers because no one is writing to node */
-    hrtimer_cancel(&pwm_timers[0]);
+    hrtimer_cancel(&pwm_timers[0].timer);
     for(i = 0; i < steppers_count; i++){
         SetGpioPin(steppers_en[i]);
     }
@@ -678,6 +689,8 @@ const struct MIDIStruct MIDITable[88] = {
  *   The function copy_from_user transfers the data from user space to kernel space.
  */
 static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos) {
+    int index;
+
     /* Reset memory */
     memset(gpio_driver_buffer, 0, BUF_LEN);
     /* Get data from user space */
@@ -686,38 +699,39 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
     }
     else {
         if(len == 2){ // Got a note
+            index = gpio_driver_buffer[0];
 
             /* Ponovo pocinje merenje vremena za max trajanje note */
-            steppers_ticks[0] = 0;
+            steppers_ticks[index] = 0;
 
             /* Prekine se prosla nota ako se razlikuje od one koju je do sada svirao */
-            if(gpio_driver_buffer[1] != steppers_history[0]){
-                hrtimer_cancel(&pwm_timers[0]);
-                SetGpioPin(steppers_en[0]); /* Disable stepper to stop wasting current */
-                steppers_history[0] = gpio_driver_buffer[1];
+            if(gpio_driver_buffer[1] != steppers_history[index]){
+                hrtimer_cancel(&pwm_timers[index].timer);
+                SetGpioPin(steppers_en[index]); /* Disable stepper to stop wasting current */
+                steppers_history[index] = gpio_driver_buffer[1];
             }
 
             /* No stop signal */
             if (gpio_driver_buffer[1] != 0xFF) {
                 /* Enable stepper so it will be able to play the note */
-                ClearGpioPin(steppers_en[0]);
+                ClearGpioPin(steppers_en[index]);
                 /* Print for debug */
                 printk(KERN_INFO "%d -> note %d, period = %d\n", gpio_driver_buffer[0], gpio_driver_buffer[1], MIDITable[ gpio_driver_buffer[1] - 21].period);
                 /* Postavi max count na vrednost iz tabele puta 40 da duze traje */
-                steppers_max_ticks[0] = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 80;
+                steppers_max_ticks[index] = MIDITable[ gpio_driver_buffer[1] - 21 ].ticks * 80;
                 
                 /* Set interval for high resolution timer */
-                kt[0] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
+                kt[index] = ktime_set(0, MIDITable[ gpio_driver_buffer[1] - 21 ].period * 500);
                 /* Set callback function */
-                pwm_timers[0].function = &pwm_timer_callback;
+                pwm_timers[index].timer.function = &pwm_timer_callback;
                 /* Start timer */
-                hrtimer_start(&pwm_timers[0], kt[0], HRTIMER_MODE_REL);
+                hrtimer_start(&pwm_timers[index].timer, kt[index], HRTIMER_MODE_REL);
             } 
             /* Stop signal [0xFF] */
             else {
-                hrtimer_cancel(&pwm_timers[0]);
-                SetGpioPin(steppers_en[0]); /* Disable stepper to stop wasting current */
-                steppers_history[0] = gpio_driver_buffer[1];
+                hrtimer_cancel(&pwm_timers[index].timer);
+                SetGpioPin(steppers_en[index]); /* Disable stepper to stop wasting current */
+                steppers_history[index] = gpio_driver_buffer[1];
             }
             
             return len;
