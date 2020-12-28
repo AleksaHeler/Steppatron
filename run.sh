@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 # Library
 if [[ $@ == *"lib"* ]]; then
     echo -e "${BLUE}> sudo apt-get install libasound2-dev${GRAY}"
-    sudo apt-get install libasound2-dev
+    sudo apt-get install libasound2-dev || exit
 fi
 
 # Makefile
@@ -30,7 +30,7 @@ if [[ $@ == *"make"* ]]; then
     echo -e "${BLUE}> make clean${GRAY}"
     make clean
     echo -e "${BLUE}> make${GRAY}"
-    make
+    make || exit
 fi
 
 # Remove old kernel module, if it exists 
@@ -52,12 +52,12 @@ sudo chmod 666 /dev/gpio_driver
 
 # Steppatron application
 if [[ $@ == *"file"* ]]; then
-    echo -e "${BLUE}> ./steppatron file${NC}"
-    ./bin/steppatron f $2
+    echo -e "${BLUE}> ./steppatron file${NC}" 
+    ./bin/steppatron f $2 || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
 elif [[ $@ == *"usb"* ]]; then
     echo -e "${BLUE}> ./steppatron usb${NC}"
-    ./bin/steppatron u
+    ./bin/steppatron u || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
 else # Default je tastatura
     echo -e "${BLUE}> ./steppatron keyboard${NC}"
-    ./bin/steppatron k
+    ./bin/steppatron k || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
 fi
