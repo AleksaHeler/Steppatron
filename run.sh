@@ -61,4 +61,3 @@ else # Default je tastatura
     echo -e "${BLUE}> ./steppatron keyboard${NC}"
     ./bin/steppatron k
 fi
-
