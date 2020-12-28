@@ -44,7 +44,7 @@ int rawmidiInit(snd_rawmidi_t **handler, unsigned int steppers) {
     } else {
         stepperN = 1;
     }
-    currNotes = (int *)malloc(sizeof(int) * stepperN);
+    currNotes = (unsigned char *)malloc(sizeof(int) * stepperN);
     return 1;
 }
 
@@ -55,7 +55,7 @@ void rawmidiClose(snd_rawmidi_t *handler) {
     handler = NULL;
 }
 
-inline int dist(unsigned char a, unsigned char b) {
+static inline int dist(unsigned char a, unsigned char b) {
     return a > b ? a - b : b - a;
 }
 
@@ -82,6 +82,7 @@ int getRawmidiCommand(unsigned char *command, snd_rawmidi_t *handler) {
         return 0;
     }
 
+    int found = 0;
     switch (message.type) {
     case MSG_NOTE_ON:
         command[1] = message.param1;
@@ -89,7 +90,6 @@ int getRawmidiCommand(unsigned char *command, snd_rawmidi_t *handler) {
         currNotes[command[0]] = command[1];
         break;
     case MSG_NOTE_OFF:
-        int found = 0;
         for (size_t i = 0; i < stepperN; i++) {
             if (currNotes[i] == message.param1) {
                 command[0] = i;

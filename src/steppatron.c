@@ -24,11 +24,11 @@ int main(int argc, char **argv) {
         // Read from USB
         snd_rawmidi_t *midiIn = NULL;
         unsigned int steppers;
-        if (argc > 1) steppers = argv[2];
+        if (argc > 1) steppers = atoi(argv[2]);
         else steppers = 1;
 
         if (rawmidiInit(&midiIn, steppers)) {
-            char buffer[2];
+            unsigned char buffer[2];
             for (int i = 0; i < 1000; i++) {
                 if (getRawmidiCommand(buffer, midiIn)) {
                     // Send to file
