@@ -274,15 +274,18 @@ int playMidiFile(const char *midiFileName, const int outFile) {
 
     unsigned int minDelta;
     unsigned char buffer[2];
-    unsigned char currentNote = NOTE_OFF;
+    unsigned char currentNotes[MAX_STEPPERS];
+    for (int i = 0; i < MAX_STEPPERS; i++) {
+        currentNotes[i] = NOTE_OFF;
+    }
 
     while (done < midiData.header.trackN) {
         minDelta = -1;
         for (int i = 0; i < midiData.header.trackN; i++) {
             while (currEvents[i] != NULL && currEvents[i]->event.delta == 0) {
                 // Parse the event
-                switch (currEvents[i]->event.status) {
-                case STATUS_META:
+                if (currEvents[i]->event.status == STATUS_META) {
+                    // Meta event
                     switch (currEvents[i]->event.param1) {
                     case META_TIME_SIGNATURE:
                         // TODO parse the remaining two bytes
@@ -313,25 +316,29 @@ int playMidiFile(const char *midiFileName, const int outFile) {
                         fprintf(stderr, "Error while parsing meta event\n");
                         break;
                     }
-                    break;
-                case MSG_NOTE_ON:
-                    currentNote = currEvents[i]->event.param1;
-                    buffer[0] = i - 1;
-                    buffer[1] = currentNote;
-                    printf("Note %d on stepper %d ON\n", buffer[1], buffer[0]);
-                    write(outFile, buffer, 2);
-                    break;
-                case MSG_NOTE_OFF:
-                    if (currEvents[i]->event.param1 == currentNote) {
-                        currentNote = NOTE_OFF;
+                } else {
+                    // MIDI event
+                    unsigned char statusUpper = currEvents[i]->event.status & 0xF0;
+                    switch (statusUpper) {
+                    case MSG_NOTE_ON:
+                        currentNotes[i - 1] = currEvents[i]->event.param1;
                         buffer[0] = i - 1;
-                        buffer[1] = NOTE_OFF;
-                        printf("Note on stepper %d OFF\n", buffer[0]);
+                        buffer[1] = currentNotes[i - 1];
+                        printf("Note %d on stepper %d ON\n", buffer[1], buffer[0]);
                         write(outFile, buffer, 2);
+                        break;
+                    case MSG_NOTE_OFF:
+                        if (currEvents[i]->event.param1 == currentNotes[i - 1]) {
+                            currentNotes[i - 1] = NOTE_OFF;
+                            buffer[0] = i - 1;
+                            buffer[1] = NOTE_OFF;
+                            printf("Note on stepper %d OFF\n", buffer[0]);
+                            write(outFile, buffer, 2);
+                        }
+                        break;
+                    default:
+                        break;
                     }
-                    break;
-                default:
-                    break;
                 }
                 // Go to next event
                 currEvents[i] = currEvents[i]->next;

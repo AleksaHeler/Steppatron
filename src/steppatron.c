@@ -23,7 +23,11 @@ int main(int argc, char **argv) {
     if (argc == 1 || strcmp(argv[1], "u") == 0) {
         // Read from USB
         snd_rawmidi_t *midiIn = NULL;
-        if (rawmidiInit(&midiIn)) {
+        unsigned int steppers;
+        if (argc > 1) steppers = argv[2];
+        else steppers = MAX_STEPPERS;
+        
+        if (rawmidiInit(&midiIn, steppers)) {
             char buffer[2];
             for (int i = 0; i < 1000; i++) {
                 if (getRawmidiCommand(buffer, midiIn)) {

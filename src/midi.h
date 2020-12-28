@@ -1,6 +1,8 @@
 #ifndef MIDI_H
 #define MIDI_H
 
+#define MAX_STEPPERS 4
+
 #define NOTE_OFF 0xFF
 
 // MIDI CONSTANTS
