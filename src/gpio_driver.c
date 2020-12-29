@@ -704,6 +704,12 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
     else {
         if(len == 2){ // Got a note
             index = gpio_driver_buffer[0];
+            if(index >= steppers_count){
+                printk(KERN_INFO "[ERROR] Invalid stepper index %d\n", gpio_driver_buffer[0]);
+                printk(KERN_INFO "  steppers_count = %d\n", steppers_count);
+                printk(KERN_INFO "  max index is %d\n", steppers_count-1);
+                return EINVAL;
+            }
 
             /* Ponovo pocinje merenje vremena za max trajanje note */
             steppers_ticks[index] = 0;
