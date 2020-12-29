@@ -12,3 +12,11 @@ Omogućiti da korisnička aplikacija učitava sadržaj u MIDI formatu (iz datote
 ## TODO: Dodati uputstvo za run.sh
 
 ## TODO: FAQ
+Error with EoL encoding (\r\n instead of \n):
+> -bash: ./run.sh: /bin/bash^M: bad interpreter: No such file or directory
+
+Solution:
+```console
+pi@raspberry:~/Steppatron $ sudo apt-get install dos2unix
+pi@raspberry:~/Steppatron $ dos2unix run.sh
+```
