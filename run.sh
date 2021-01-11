@@ -56,7 +56,7 @@ if [[ $@ == *"file"* ]]; then
     ./bin/steppatron f $2 || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
 elif [[ $@ == *"usb"* ]]; then
     echo -e "${BLUE}> ./steppatron usb${NC}"
-    ./bin/steppatron u || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
+    sudo ./bin/steppatron u $STEPPER_COUNT || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"
 else # Default je tastatura
     echo -e "${BLUE}> ./steppatron keyboard${NC}"
     ./bin/steppatron k || echo -e "${BLUE}> [ERROR] Maybe try to compile first with ./run.sh make ${NC}"

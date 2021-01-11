@@ -44,7 +44,10 @@ int rawmidiInit(snd_rawmidi_t **handler, unsigned int steppers) {
     } else {
         stepperN = 1;
     }
-    currNotes = (unsigned char *)malloc(sizeof(int) * stepperN);
+    currNotes = (unsigned char *)malloc(sizeof(unsigned char) * stepperN);
+    for (size_t i = 0; i < stepperN; i++) {
+        currNotes[i] = NOTE_OFF;
+    }
     return 1;
 }
 

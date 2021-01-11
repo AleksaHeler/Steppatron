@@ -2,12 +2,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include "midiParser.h"
 #include "rawMidi.h"
 #include "getch.h"
 
 // Output file name (driver node)
 #define FILE_NAME "/dev/gpio_driver"
+
+// SIGINT received flag
+static volatile int end = 0;
+
+void interruptHandler(int a) {
+    end = 1;
+}
 
 // Arguments:
 // 1. - u for USB, k for keyboard, f for file
@@ -20,6 +28,8 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    signal(SIGINT, interruptHandler);
+
     if (argc == 1 || strcmp(argv[1], "u") == 0) {
         // Read from USB
         snd_rawmidi_t *midiIn = NULL;
@@ -29,7 +39,7 @@ int main(int argc, char **argv) {
 
         if (rawmidiInit(&midiIn, steppers)) {
             unsigned char buffer[2];
-            for (int i = 0; i < 1000; i++) {
+            while (!end) {
                 if (getRawmidiCommand(buffer, midiIn)) {
                     // Send to file
                     int ret_val = write(file_desc, buffer, 2);
@@ -42,6 +52,7 @@ int main(int argc, char **argv) {
                 }
             }
             rawmidiClose(midiIn);
+            printf("Done!\n");
         }
 
     } else if (strcmp(argv[1], "f") == 0 && argc > 2) {

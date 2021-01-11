@@ -139,7 +139,6 @@ static int steppers_count = 1;                  /* Broj stepper motora */
 static int steppers_step[MAX_STEPPERS];         /* Step pinovi stepera*/
 static int steppers_en[MAX_STEPPERS];           /* Enable pinovi stepera */
 static int steppers_power[MAX_STEPPERS];        /* Trenutna vrednost napona na pinu */
-static int steppers_history[MAX_STEPPERS];      /* Zadnje svirana nota stepera */
 static int steppers_ticks[MAX_STEPPERS];        /* Merenje vremena da nota ne svira beskonacno */
 static int steppers_max_ticks[MAX_STEPPERS];    /* -||- ovo je max vrednost za ticks */
 
@@ -450,7 +449,6 @@ int gpio_driver_init(void){
     /* initiate all necessary arrays to default values */
     for (i = 0; i < steppers_count; i++)
     {
-        steppers_history[i] = 0xFF;
         steppers_ticks[i] = 0;
         steppers_max_ticks[i] = 0;
     }
@@ -737,7 +735,6 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             else {
                 hrtimer_cancel(&pwm_timers[index].timer);
                 SetGpioPin(steppers_en[index]); /* Disable stepper to stop wasting current */
-                steppers_history[index] = gpio_driver_buffer[1];
             }
             
             return len;
