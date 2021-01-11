@@ -714,13 +714,9 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             /* Ponovo pocinje merenje vremena za max trajanje note */
             steppers_ticks[index] = 0;
 
-            /* Prekine se prosla nota ako se razlikuje od one koju je do sada svirao */
-            if(gpio_driver_buffer[1] != steppers_history[index]){
-                hrtimer_cancel(&pwm_timers[index].timer);
-                SetGpioPin(steppers_en[index]); /* Disable stepper to stop wasting current */
-                steppers_history[index] = gpio_driver_buffer[1];
-            }
-
+            /* Prekine se prosla nota */
+            hrtimer_cancel(&pwm_timers[index].timer);
+            
             /* No stop signal */
             if (gpio_driver_buffer[1] != 0xFF) {
                 /* Enable stepper so it will be able to play the note */
