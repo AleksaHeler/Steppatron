@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         // Read from USB
         snd_rawmidi_t *midiIn = NULL;
         unsigned int steppers;
-        if (argc > 1) steppers = atoi(argv[2]);
+        if (argc > 2) steppers = atoi(argv[2]);
         else steppers = 1;
 
         if (rawmidiInit(&midiIn, steppers)) {
@@ -52,13 +52,20 @@ int main(int argc, char **argv) {
                 }
             }
             rawmidiClose(midiIn);
-            printf("Done!\n");
+            printf("\nDone!\n");
         }
-
     } else if (strcmp(argv[1], "f") == 0 && argc > 2) {
         // Read from file
-        playMidiFile(argv[2], file_desc);
-
+        midi_t midi;
+        if (readMidiFile(&midi, argv[2])) {
+            if (initPlayer(&midi)) {
+                while (!end) {
+                    playNext(&midi, file_desc);
+                }
+            }
+            freeMidi(&midi);
+            printf("\nDone!\n");
+        }
     } else if (strcmp(argv[1], "k") == 0) {
         // Read from keyboard
         int ret_val;
@@ -73,7 +80,7 @@ int main(int argc, char **argv) {
         printf("Start playing notes\n");
 
         input[0] = 0;
-        while (1) {
+        while (!end) {
             input[1] = getch();
             printf("Pressed: %c\n", input[1]);
 
