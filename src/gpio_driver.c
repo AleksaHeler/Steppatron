@@ -31,10 +31,11 @@
 #include <linux/ioport.h>
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
-#include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
+#include <linux/gpio.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 /* Module info */
 MODULE_LICENSE("GPL");
@@ -162,6 +163,9 @@ static int gpio_driver_major;       /* Major number. */
 #define BUF_LEN 80                  /* Buffer to store data. */
 char* gpio_driver_buffer;
 void* virt_gpio_base;               /* Virtual address where the physical GPIO address is mapped */
+
+/* IRQ number. */
+static int irq_gpio3 = -1;
 
 /*
  * GetGPFSELReg function
@@ -360,6 +364,7 @@ char GetGpioPinValue(char pin)
     return (tmp >> pin);
 }
 
+int stopped = 0;
 /* timer callback function called each time the timer expires */
 static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     struct hrtimer_param *struct_ptr;
@@ -376,7 +381,7 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     /* Switch voltage on stepper pin */
     steppers_power[index] ^= 0x1;
 
-    if (steppers_power[index])
+    if (steppers_power[index] && !stopped)
         SetGpioPin(steppers_step[index]);
     else
         ClearGpioPin(steppers_step[index]);
@@ -390,6 +395,15 @@ static enum hrtimer_restart pwm_timer_callback(struct hrtimer *param) {
     hrtimer_forward(&pwm_timers[index].timer, ktime_get(), kt[index]);
     return HRTIMER_RESTART;
 }
+
+/* interrupt handler called when falling edge on PB0 (GPIO_03) occurs; */
+static irqreturn_t h_irq_gpio3(int irq, void *data) //stops steppers
+{
+    stopped = !stopped;        
+
+    return IRQ_HANDLED;
+}
+
 
 /*
  * Initialization:
@@ -464,8 +478,29 @@ int gpio_driver_init(void){
         hrtimer_init(&pwm_timers[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     }
 
+
+    /* Initialize gpio 3 ISR. */
+    result = gpio_request_one(GPIO_03, GPIOF_IN, "irq_gpio3");
+        if(result != 0)
+    {
+        printk("Error: GPIO3 request failed!\n");
+        goto fail_irq;
+    }
+    irq_gpio3 = gpio_to_irq(GPIO_03);
+    result = request_irq(irq_gpio3, h_irq_gpio3,
+      IRQF_TRIGGER_FALLING, "irq_gpio3", (void *)(h_irq_gpio3));
+    if(result != 0)
+    {
+        printk("Error: ISR3 not registered!\n");
+        goto fail_irq;
+    }
+
     return 0;
 
+fail_irq:
+    /* Unmap GPIO Physical address space. */
+    if (virt_gpio_base)
+        iounmap(virt_gpio_base);
 fail_no_virt_mem:
     /* Freeing buffer gpio_driver_buffer. */
     if (gpio_driver_buffer)
@@ -501,6 +536,13 @@ void gpio_driver_exit(void) {
         SetGpioPinDirection(steppers_step[i], GPIO_DIRECTION_IN);
         SetGpioPinDirection(steppers_en[i], GPIO_DIRECTION_IN);
     }
+
+    /* Release IRQ and handler. */
+    disable_irq(irq_gpio3);
+    free_irq(irq_gpio3, h_irq_gpio3);
+    gpio_free(GPIO_03);
+
+    SetInternalPullUpDown(GPIO_03, PULL_NONE);
 
     /* Unmap GPIO Physical address space. */
     if (virt_gpio_base) {
@@ -716,7 +758,7 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             hrtimer_cancel(&pwm_timers[index].timer);
             
             /* No stop signal */
-            if (gpio_driver_buffer[1] != 0xFF) {
+            if (gpio_driver_buffer[1] != 0xFF && (gpio_driver_buffer[1] >= 21 && gpio_driver_buffer[1] <= 108) ) {
                 /* Enable stepper so it will be able to play the note */
                 ClearGpioPin(steppers_en[index]);
                 /* Print for debug */

@@ -203,17 +203,40 @@ int main(int argc, char **argv) {
         // Read from keyboard
         int ret_val;
         char input[2];
-        input[0] = '1'; //for now only 1. stepper
         int octave;
 
+        int auto_stepper = 0;
+        int stepper = 0;
+        while(1){
+            printf("Choose stepper manually [0-3] or automatically [4]: ");
+            scanf("%d", &stepper);
+
+            if(stepper<0 || stepper>4)
+                printf("Answer must be in range [1,5]\n");
+            else
+                break;
+        }
+
+        if(stepper < 4)
+            input[0] = stepper;
+        else{
+            auto_stepper = 1;
+            stepper = -1;
+        }
+
         printf("Choose octave [1-7]: ");
-        scanf("%d", &octave);
+        while(1){
+            scanf("%d", &octave);
+            if(octave<1 || octave>7)
+                printf("Answer must be in range [1,7]\n");
+            else
+                break;
+        }
         getch(); //da pokupi enter
 
         printf("Start playing notes\n");
 
-        input[0] = 0;
-        while (!end) {
+        while (1) {
             input[1] = getch();
             printf("Pressed: %c\n", input[1]);
 
@@ -267,6 +290,29 @@ int main(int argc, char **argv) {
                 break;
             }
 
+            if(auto_stepper == 1){
+                if(++stepper == 4)
+                    stepper = 0;
+
+                if(input[1] == 0xFF){
+
+                    for(int i = 0; i<4; i++){
+                        input[0] = i;
+                        ret_val = write(file_desc, input, 2);
+
+                        if (ret_val == 0) {
+                            printf("Error writing to file\n");
+                            close(file_desc);
+                            return 2;
+                        }
+                    }
+                    
+                    continue;
+                }
+                else
+                    input[0] = stepper;
+            }
+
             ret_val = write(file_desc, input, 2);
 
             if (ret_val == 0) {
@@ -275,7 +321,6 @@ int main(int argc, char **argv) {
                 return 2;
             }
         }
-
     } else {
         printf("Invalid arguments!\n");
         printf("Use: steppatron [MODE] [FILENAME]\n");
