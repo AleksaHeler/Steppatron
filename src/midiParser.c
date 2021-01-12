@@ -1,51 +1,5 @@
 #include "midiParser.h"
 
-typedef struct {
-    unsigned short format;
-    unsigned short trackN;
-    unsigned short timediv;
-} midiHeader_t;
-
-typedef struct {
-    unsigned int delta; // DeltaTime before this event
-    unsigned char status;
-    unsigned char param1; // Event type for meta events, param1 for midi
-    unsigned char param2;
-    unsigned int dataSize;
-    unsigned char *data; // Data for meta and SysEx events if applicable
-} midiEvent_t;
-
-typedef struct nodeMidiEvent {
-    struct nodeMidiEvent *next;
-    midiEvent_t event;
-} nodeMidiEvent_t;
-
-typedef struct {
-    nodeMidiEvent_t *first;
-    nodeMidiEvent_t *last;
-} listMidiEvent_t;
-
-typedef struct {
-    unsigned int size;
-    listMidiEvent_t eventList;
-} midiTrack_t;
-
-typedef struct {
-    midiHeader_t header;
-    midiTrack_t *tracks;
-} midiData_t;
-
-struct midi_t {
-    midiData_t data;
-    unsigned short timeDiv;                // Ticks per beat
-    unsigned char timeSig[2];              // Time signature (timeSig[0] / 2^timeSig[1]) - default 4/4
-    unsigned int currTempo;                // Track tempo in microseconds per beat - default 120bpm
-    unsigned short done;                   // Number of tracks finished playing
-    unsigned char currNotes[MAX_STEPPERS];
-    nodeMidiEvent_t **currEvents;
-    struct timespec nextEventTime;         // Absolute time of the next closest midi event
-};
-
 static inline unsigned long deltaToNs(unsigned int delta, unsigned int tempo, unsigned short timeDiv) {
     double retVal = delta;
     retVal /= timeDiv;
@@ -253,13 +207,13 @@ int initPlayer(midi_t *handler) {
         return 0;
     }
 
-    nodeMidiEvent_t **currEvents = (nodeMidiEvent_t **)malloc(sizeof(nodeMidiEvent_t *) * handler->data.header.trackN);
-    if (currEvents == NULL) {
+    handler->currEvents = (nodeMidiEvent_t **)malloc(sizeof(nodeMidiEvent_t *) * handler->data.header.trackN);
+    if (handler->currEvents == NULL) {
         fprintf(stderr, "Not enough memory available!\n");
         return 0;
     }
     for (int i = 0; i < handler->data.header.trackN; i++) {
-        currEvents[i] = handler->data.tracks[i].eventList.first;
+        handler->currEvents[i] = handler->data.tracks[i].eventList.first;
     }
 
     for (int i = 0; i < MAX_STEPPERS; i++) {
@@ -285,7 +239,7 @@ void freeMidi(midi_t *handler) {
 // Plays the next events in the MIDI file, this function is blocking
 // Returns 0 on faliure, 1 on success
 int playNext(midi_t *handler, int outFile) {
-    if (handler->done < handler->data.header.trackN) {
+    if (handler->done >= handler->data.header.trackN) {
         return 0;
     }
     
@@ -294,7 +248,6 @@ int playNext(midi_t *handler, int outFile) {
     } else {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &handler->nextEventTime, NULL);
     }
-
     unsigned int minDelta = -1;
     unsigned char buffer[2];
     for (int i = 0; i < handler->data.header.trackN; i++) {

@@ -17,10 +17,14 @@ TSTEPPATRON := bin/steppatron
 OPWM := obj/pwm.o
 ODRIVER := obj/gpio_driver.o
 OSTEPPATRON := obj/steppatron.o
+ORAWMIDI := obj/rawMidi.o
+OPARSER := obj/midiParser.o
 # C vars
 CPWM := src/pwm.c
 CDRIVER := src/gpio_driver.c
 CSTEPPATRON := src/steppatron.c
+CRAWMIDI := src/rawMidi.c
+CPARSER := src/midiParser.c
 
 TARGET := gpio_driver.ko
 obj-m := src/gpio_driver.o
@@ -50,8 +54,8 @@ pwm: $(OPWM)
 	$(CC) -g $(OPWM) -o $(TPWM) $(LFLAGS)
 gpio_driver:
 	$(MAKE) -I $(KDIR)/arch/arm/include/asm/ -C $(KDIR) M=$(PWD)
-steppatron: $(OSTEPPATRON)
-	$(CC) -g $(OSTEPPATRON) -o $(TSTEPPATRON) $(LFLAGS)
+steppatron: $(OPARSER) $(ORAWMIDI) $(OSTEPPATRON)
+	$(CC) -g $(OSTEPPATRON) $(OPARSER) $(ORAWMIDI) -o $(TSTEPPATRON) $(LFLAGS)
 
 ######################################################
 ###                       .o                       ###
@@ -60,6 +64,10 @@ $(OPWM): $(CPWM)
 	$(CC) $(FLAGS) $(CPWM) -o $(OPWM)
 $(OSTEPPATRON): $(CSTEPPATRON)
 	$(CC) $(FLAGS) $(CSTEPPATRON) -o $(OSTEPPATRON)
+$(OPARSER): $(CPARSER)
+	$(CC) $(FLAGS) $(CPARSER) -o $(OPARSER)
+$(ORAWMIDI): $(CRAWMIDI)
+	$(CC) $(FLAGS) $(CRAWMIDI) -o $(ORAWMIDI)
 
 ######################################################
 ###                    DRIVER                      ###
@@ -88,4 +96,4 @@ clean_pwm:
 clean_gpio_driver:
 	rm -f src/*.o src/$(TARGET) src/.*.cmd src/.*.flags src/*.mod.c src/*.mod
 clean_steppatron:
-	rm -f $(OSTEPPATRON) $(TSTEPPATRON)
+	rm -f $(OSTEPPATRON) $(OPARSER) $(ORAWMIDI) $(TSTEPPATRON)
