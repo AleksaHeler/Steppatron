@@ -36,14 +36,12 @@
 #include <linux/gpio.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include "midi.h"
 
 /* Module info */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Marko Đorđević, Radomir Zlatković, Aleksa Heler");
 MODULE_DESCRIPTION("Midi keyboard to stepper motor interface using kernel module");
-
-/* Najveci broj podrzanih stepera (potrebno za nizove) */
-#define MAX_STEPPERS 4
 
 /* GPIO registers base address. */
 #define BCM2708_PERI_BASE   (0x3F000000)
@@ -758,7 +756,7 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
             hrtimer_cancel(&pwm_timers[index].timer);
             
             /* No stop signal */
-            if (gpio_driver_buffer[1] != 0xFF && (gpio_driver_buffer[1] >= 21 && gpio_driver_buffer[1] <= 108) ) {
+            if (gpio_driver_buffer[1] != NOTE_OFF && (gpio_driver_buffer[1] >= 21 && gpio_driver_buffer[1] <= 108) ) {
                 /* Enable stepper so it will be able to play the note */
                 ClearGpioPin(steppers_en[index]);
                 /* Print for debug */
@@ -773,7 +771,7 @@ static ssize_t gpio_driver_write(struct file *filp, const char *buf, size_t len,
                 /* Start timer */
                 hrtimer_start(&pwm_timers[index].timer, kt[index], HRTIMER_MODE_REL);
             } 
-            /* Stop signal [0xFF] */
+            /* Stop signal [NOTE_OFF] */
             else {
                 hrtimer_cancel(&pwm_timers[index].timer);
                 SetGpioPin(steppers_en[index]); /* Disable stepper to stop wasting current */
