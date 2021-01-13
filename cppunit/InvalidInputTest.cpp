@@ -72,7 +72,7 @@ void InvalidInputTest::invalidNoteUnderTest()
         }
     }
 
-    close(file_desc); //mozda moze bez ovoga
+    close(file_desc);
 
     system("dmesg -t > dmesg_log.txt");
     file_desc = open("dmesg_log.txt", O_RDWR);
@@ -108,7 +108,7 @@ void InvalidInputTest::invalidNoteOverTest()
         }
     }
 
-    close(file_desc); //verovatno moze bez ovoga
+    close(file_desc);
 
     system("dmesg -t > dmesg_log.txt");
     file_desc = open("dmesg_log.txt", O_RDWR);
