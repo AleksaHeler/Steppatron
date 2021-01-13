@@ -11,6 +11,7 @@ CPPUNIT_TEST_SUITE_REGISTRATION( DelayTest );
 
 void DelayTest::setUp()
 {
+    printf("-");
     char input[2];
     int ret_val_write;
 

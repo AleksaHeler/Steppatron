@@ -12,6 +12,7 @@ CPPUNIT_TEST_SUITE_REGISTRATION( KeyboardTest );
 
 void KeyboardTest::setUp()
 {
+    printf("-");
     file_desc = open("/dev/gpio_driver", O_RDWR); 
     CPPUNIT_ASSERT( file_desc >= 0); //maybe can't open file
 
@@ -83,8 +84,10 @@ void KeyboardTest::octaveTest(int octave)
     for(int i = 0; i<15; i++)
     {
         expected_note = correctNote(octave, i);
-
-        if( expected_note == (char)EOF && ((i == 7) || (i == 13) || (i == 14)) )
+        
+        if( (expected_note == (char)EOF) && ((i == 7) || (i == 14)) )
+            continue;
+        if ( (expected_note == 0) && (i == 13))
             continue;
 
         ret_val_read = read(file_desc, read_buffer, 16);
@@ -152,12 +155,15 @@ char KeyboardTest::correctNote(int octave, int i)
         return (char)M[5 * (octave - 1) + 4].MIDINumber;
 
     else if(i == 13) // stop sign
-        return (char)EOF;
+        return 0;
 
     else //i == 14
         return (char)EOF;
 
 }
+
+char inOrder[] = {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'w', 'e', 't', 'y', 'u', 'i', 'q'};
+int brojac = 0;
 
 char KeyboardTest::playNote(int octave)
 {
@@ -165,6 +171,7 @@ char KeyboardTest::playNote(int octave)
     while (1) {
         c = getch();
         printf("Pressed: %c\n", c);
+        CPPUNIT_ASSERT_EQUAL(inOrder[brojac++], c);        
 
         switch (c) {
             //donji red

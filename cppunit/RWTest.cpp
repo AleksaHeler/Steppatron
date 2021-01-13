@@ -10,7 +10,9 @@
 CPPUNIT_TEST_SUITE_REGISTRATION( RWTest );
 
 void RWTest::setUp()
-{}
+{
+    printf("-");
+}
 
 void RWTest::tearDown()
 {
