@@ -522,11 +522,10 @@ void gpio_driver_exit(void) {
     
     printk(KERN_INFO "Removing gpio_driver module\n");
 
-    /* Release high resolution timer. */
-    hrtimer_cancel(&pwm_timers[0].timer);
-
     /* Clear GPIO pins. */
     for(i = 0; i < steppers_count; i++){
+        /* Release high resolution timer. */
+        hrtimer_cancel(&pwm_timers[0].timer);
         /* Set voltage to low */
         ClearGpioPin(steppers_step[i]);
         ClearGpioPin(steppers_en[i]);
