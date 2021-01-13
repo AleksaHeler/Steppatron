@@ -13,7 +13,7 @@ void rawmidiClose(snd_rawmidi_t *handler);
 
 // Reads a midi message from usb
 // Returns -1 in case of success, and the read byte in case of error
-int readUsbMessage(midiMessage_t *message, snd_rawmidi_t *device);
+int readUsbMessage(midiMessage_t *message, snd_rawmidi_t *handler);
 
 // Gets the next command to be sent to the steppatron driver
 // from the RawMIDI interface
