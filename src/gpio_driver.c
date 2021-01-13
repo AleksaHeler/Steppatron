@@ -570,9 +570,10 @@ static int gpio_driver_release(struct inode *inode, struct file *filp){
     int i;
 
     /* Stop the timers and disable steppers because no one is writing to node */
-    hrtimer_cancel(&pwm_timers[0].timer);
+
     for(i = 0; i < steppers_count; i++){
         SetGpioPin(steppers_en[i]);
+        hrtimer_cancel(&pwm_timers[i].timer);
     }
     
     return 0;
