@@ -35,7 +35,7 @@ int rawmidiInit(snd_rawmidi_t **handler, unsigned int steppers) {
         fprintf(stderr, "Cannot open port: %s\n", MIDI_PORT);
         return 0;
     }
-    if (steppers < MAX_STEPPERS && steppers != 0) {
+    if (steppers <= MAX_STEPPERS && steppers != 0) {
         stepperN = steppers;
     } else {
         stepperN = 1;

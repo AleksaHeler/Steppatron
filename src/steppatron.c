@@ -167,7 +167,6 @@ int main(int argc, char **argv) {
         unsigned int steppers;
         if (argc > 2) steppers = atoi(argv[2]);
         else steppers = 1;
-
         if (rawmidiInit(&midiIn, steppers)) {
             unsigned char buffer[2];
             while (!end) {
